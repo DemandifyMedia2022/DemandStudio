@@ -51,7 +51,7 @@ export function ProjectDetails({ project, organization }: ProjectDetailsProps) {
                 </div>
 
                 {/* Project Name */}
-                <h1 className="text-3xl font-bold tracking-tight text-white mb-3">
+                <h1 className="text-3xl font-bold tracking-tight text-foreground mb-3">
                     {project.name}
                 </h1>
 
@@ -59,7 +59,7 @@ export function ProjectDetails({ project, organization }: ProjectDetailsProps) {
                 <div className="flex flex-wrap gap-x-12 gap-y-2 text-xs text-muted-foreground uppercase tracking-wider font-semibold">
                     <div className="flex flex-col gap-1">
                         <span>Plan</span>
-                        <span className="text-white text-sm font-medium capitalize">Free</span>
+                        <span className="text-foreground text-sm font-medium capitalize">Free</span>
                     </div>
 
                     <div className="flex flex-col gap-1">
@@ -70,7 +70,7 @@ export function ProjectDetails({ project, organization }: ProjectDetailsProps) {
                     <div className="flex flex-col gap-1">
                         <span>Project ID</span>
                         <div className="flex items-center gap-2 group cursor-pointer" onClick={() => copyToClipboard(project.id, "Project")}>
-                            <span className="text-gray-300 font-mono text-sm lowercase font-normal">{project.id}</span>
+                            <span className="text-muted-foreground font-mono text-sm lowercase font-normal">{project.id}</span>
                             {copiedId === "Project" ? (
                                 <Check className="h-3 w-3 text-emerald-500" />
                             ) : (
@@ -82,7 +82,7 @@ export function ProjectDetails({ project, organization }: ProjectDetailsProps) {
                     <div className="flex flex-col gap-1">
                         <span>Organization ID</span>
                         <div className="flex items-center gap-2 group cursor-pointer" onClick={() => copyToClipboard(organization.id, "Organization")}>
-                            <span className="text-gray-300 font-mono text-sm font-normal">{organization.id}</span>
+                            <span className="text-muted-foreground font-mono text-sm font-normal">{organization.id}</span>
                             {copiedId === "Organization" ? (
                                 <Check className="h-3 w-3 text-emerald-500" />
                             ) : (

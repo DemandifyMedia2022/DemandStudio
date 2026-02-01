@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 import { prisma as db } from "@/lib/prisma"
 import { ProjectDetails } from "@/components/dashboard/project-details"
+import { ProjectGetStarted } from "@/components/dashboard/project-get-started"
 
 export default async function ProjectDashboardPage(props: {
     params: Promise<{ orgSlug: string; projectSlug: string }>
@@ -30,13 +31,10 @@ export default async function ProjectDashboardPage(props: {
                 organization={project.organization}
             />
 
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold tracking-tight">Project Overview</h2>
-                <p className="text-muted-foreground">
-                    Welcome to your project dashboard. Manage your content and settings here.
-                </p>
-            </div>
             {/* Add more project-specific overview stats/widgets here later */}
+            <div>
+                <ProjectGetStarted orgSlug={params.orgSlug} projectSlug={params.projectSlug} />
+            </div>
         </div>
     )
 }
