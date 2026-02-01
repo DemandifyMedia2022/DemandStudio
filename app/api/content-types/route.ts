@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
         const projectSlug = searchParams.get("projectSlug")
         const orgSlug = searchParams.get("orgSlug")
 
+        const slug = searchParams.get("slug")
+
         if (!projectSlug || !orgSlug) {
             return NextResponse.json({ error: "Project context required" }, { status: 400 })
         }
@@ -39,12 +41,16 @@ export async function GET(request: NextRequest) {
 
         const contentTypes = await prisma.contentType.findMany({
             where: {
-                projectId: project.id
+                projectId: project.id,
+                ...(slug && { slug }),
             },
             include: {
                 _count: {
                     select: { items: true },
                 },
+                fields: {
+                    orderBy: { order: 'asc' }
+                }
             },
             orderBy: { createdAt: "desc" },
         })

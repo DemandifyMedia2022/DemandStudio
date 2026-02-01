@@ -7,7 +7,6 @@ import {
     Key,
     Database,
     GalleryVerticalEnd,
-    ArrowLeft,
 } from "lucide-react"
 import { usePathname } from "next/navigation"
 
@@ -19,9 +18,6 @@ import {
     SidebarFooter,
     SidebarHeader,
     SidebarRail,
-    SidebarMenu,
-    SidebarMenuItem,
-    SidebarMenuButton,
 } from "@/components/ui/sidebar"
 
 // Types
@@ -136,6 +132,11 @@ export function ProjectSidebar({
                             url: `${baseUrl}/api-docs`,
                             isActive: pathname.startsWith(`${baseUrl}/api-docs`),
                         },
+                        {
+                            title: "CORS Origins",
+                            url: `${baseUrl}/developer/cors-origins`,
+                            isActive: pathname.startsWith(`${baseUrl}/developer/cors-origins`),
+                        },
                     ],
                 }
             ],
@@ -156,16 +157,6 @@ export function ProjectSidebar({
                 <NavMain items={data.navMain} />
             </SidebarContent>
             <SidebarFooter>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                            <a href={`/dashboard/${orgSlug}`} className="text-muted-foreground hover:text-foreground">
-                                <ArrowLeft className="mr-2 h-4 w-4" />
-                                <span>Back to Organization</span>
-                            </a>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
                 <NavUser user={data.user} />
             </SidebarFooter>
             <SidebarRail />

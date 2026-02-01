@@ -88,7 +88,7 @@ export function OrgBentoNav({ orgSlug, orgId, projects = [] }: { orgSlug: string
 
     return (
         <div className="w-full">
-            <h2 className="text-2xl font-bold mb-4">Navigation</h2>
+            <h2 className="text-2xl font-bold mb-4 mt-[-20px]">Navigation</h2>
             <BentoGridTemplateTwo items={items} />
         </div>
     )

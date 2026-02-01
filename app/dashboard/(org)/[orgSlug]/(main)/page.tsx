@@ -3,6 +3,7 @@ import { prisma as db } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { Greeting } from "@/components/dashboard/dashboard-widgets"
 import { OrgBentoNav } from "@/components/dashboard/org-bento-nav"
+import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 
 export default async function OrgDashboardPage(props: {
     params: Promise<{ orgSlug: string }>
@@ -42,13 +43,15 @@ export default async function OrgDashboardPage(props: {
     }
 
     return (
-        <div className="max-w-6xl mx-auto space-y-8">
-            <Greeting orgName={org.name} />
+        <div className="min-h-screen flex flex-col">
+            <DashboardHeader user={session.user} />
+            <div className="flex-1 max-w-6xl w-full mx-auto space-y-8 p-4">
+                <Greeting orgName={org.name} />
 
-            <div className="mb-8">
-                <OrgBentoNav orgSlug={org.slug} orgId={org.id} projects={org.projects} />
+                <div className="mb-8">
+                    <OrgBentoNav orgSlug={org.slug} orgId={org.id} projects={org.projects} />
+                </div>
             </div>
-
         </div>
     )
 }

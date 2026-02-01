@@ -36,7 +36,7 @@ export function Editor({
   editable?: boolean
 }) {
   return (
-    <div className={`bg-background overflow-hidden rounded-lg border shadow ${!editable ? "border-none shadow-none" : ""}`}>
+    <div className={`bg-background overflow-hidden rounded-lg border shadow w-full max-w-full ${!editable ? "border-none shadow-none" : ""}`}>
       <LexicalComposer
         initialConfig={{
           ...editorConfig,

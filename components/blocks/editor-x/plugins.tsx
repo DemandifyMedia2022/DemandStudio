@@ -123,7 +123,7 @@ export function Plugins({ editable = true }: { editable?: boolean }) {
       {editable && (
         <ToolbarPlugin>
           {({ blockType }) => (
-            <div className="vertical-align-middle sticky top-0 z-10 flex items-center gap-2 overflow-auto border-b p-1">
+            <div className="vertical-align-middle sticky top-0 z-10 flex items-center gap-2 overflow-x-auto border-b p-1 w-full max-w-full scrollbar-thin">
               <HistoryToolbarPlugin />
               <Separator orientation="vertical" className="!h-7" />
               <BlockFormatDropDown>
@@ -176,8 +176,8 @@ export function Plugins({ editable = true }: { editable?: boolean }) {
                 <ContentEditable
                   placeholder={placeholder}
                   className={`ContentEditable__root relative block px-8 py-4 focus:outline-none ${editable
-                      ? "h-[calc(100vh-90px)] min-h-72 overflow-auto"
-                      : "min-h-0 h-auto p-0"
+                    ? "h-[calc(100vh-90px)] min-h-72 overflow-auto"
+                    : "min-h-0 h-auto p-0"
                     }`}
                 />
               </div>
@@ -277,7 +277,7 @@ export function Plugins({ editable = true }: { editable?: boolean }) {
       </div>
       {editable && (
         <ActionsPlugin>
-          <div className="clear-both flex items-center justify-between gap-2 overflow-auto border-t p-1">
+          <div className="clear-both flex items-center justify-between gap-2 overflow-x-auto border-t p-1 w-full max-w-full scrollbar-thin">
             <div className="flex flex-1 justify-start">
               <MaxLengthPlugin maxLength={maxLength} />
               <CharacterLimitPlugin maxLength={maxLength} charset="UTF-16" />
