@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { Plus, Trash2, ArrowLeft, GripVertical, Save, Pencil } from "lucide-react"
+import { Plus, Trash2, ArrowLeft, GripVertical, Save, Pencil, Code } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -205,6 +205,37 @@ export default function ContentTypeEditorPage() {
         }
     }
 
+    const handleCopySchema = async () => {
+        if (!contentType) return
+
+        const schema = generateTypeScriptSchema(contentType)
+        await navigator.clipboard.writeText(schema)
+        toast.success("TypeScript schema copied to clipboard")
+    }
+
+    const generateTypeScriptSchema = (type: ContentType) => {
+        const typeName = type.name.replace(/[^a-zA-Z0-9]/g, '')
+
+        let schema = `export interface ${typeName} {\n`
+        schema += `  _id: string;\n`
+        schema += `  _type: '${type.slug}';\n`
+        schema += `  _createdAt: string;\n`
+        schema += `  _updatedAt: string;\n`
+
+        type.fields.forEach(field => {
+            let tsType = 'string'
+            if (field.type === 'number') tsType = 'number'
+            if (field.type === 'boolean') tsType = 'boolean'
+            // date, image, file, rich-text are all strings (or objects, but usually string URLs/JSON) in this simplified CMS
+
+            const optional = field.required ? '' : '?'
+            schema += `  ${field.key}${optional}: ${tsType};\n`
+        })
+
+        schema += `}`
+        return schema
+    }
+
     const handleSave = async () => {
         if (!contentType) return
         setIsSaving(true)
@@ -315,10 +346,16 @@ export default function ContentTypeEditorPage() {
                         Manage fields for {contentType.name}.
                     </p>
                 </div>
-                <Button onClick={handleSave} disabled={isSaving}>
-                    <Save className="mr-2 h-4 w-4" />
-                    {isSaving ? "Saving..." : "Save Schema"}
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={handleCopySchema}>
+                        <Code className="mr-2 h-4 w-4" />
+                        Copy Schema
+                    </Button>
+                    <Button onClick={handleSave} disabled={isSaving}>
+                        <Save className="mr-2 h-4 w-4" />
+                        {isSaving ? "Saving..." : "Save Schema"}
+                    </Button>
+                </div>
             </div>
 
             <div className="grid gap-8 grid-cols-1 md:grid-cols-3">

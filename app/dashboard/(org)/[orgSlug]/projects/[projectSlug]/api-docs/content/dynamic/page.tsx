@@ -33,17 +33,17 @@ export async function getProducts() {
 \`\`\`
 
 **Step 2: Type Definitions**
-Since content is dynamic, define an interface matching your Schema fields.
+**IMPORTANT:** Go to the Schema Builder in the Dashboard for your content type and click **"Copy Schema"**.
+Paste that exact interface here. Do not guess the fields.
 
 \`\`\`typescript
 // lib/types.ts
+// PASTE EXPORTED SCHEMA HERE
+// Example:
 export interface Product {
   _id: string;
   _type: 'product';
-  name: string;      // Defined in Schema
-  price: number;     // Defined in Schema
-  description?: string;
-  image?: string;
+  // ... fields from dashboard
 }
 \`\`\`
 
@@ -103,7 +103,7 @@ export default async function ProductsPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                             <div className="border rounded p-4">
                                 <h3 className="font-semibold mb-2">1. Define Schema</h3>
-                                <p className="text-xs text-muted-foreground">Create a 'product' type with fields: <code>name</code> (text), <code>price</code> (number).</p>
+                                <p className="text-xs text-muted-foreground">Create fields in the Builder. Use the <strong>"Copy Schema"</strong> button to get the exact TypeScript interface.</p>
                             </div>
                             <div className="border rounded p-4">
                                 <h3 className="font-semibold mb-2">2. Use API</h3>
