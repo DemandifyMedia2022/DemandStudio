@@ -40,7 +40,7 @@ export function ProjectDetails({ project, organization }: ProjectDetailsProps) {
     return (
         <div className="flex flex-col md:flex-row gap-6 items-start md:items-center mb-8">
             {/* Logo */}
-            <div className="h-24 w-24 bg-[#38bdf8] flex items-center justify-center text-4xl font-normal text-black rounded-sm shrink-0">
+            <div className="h-24 w-24 bg-blue-900 flex items-center justify-center text-4xl font-normal text-white rounded-sm shrink-0">
                 {originalInitials(project.name)}
             </div>
 

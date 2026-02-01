@@ -4,6 +4,7 @@ import { HelpCircle, LogOut, User } from "lucide-react"
 import { signOut } from "next-auth/react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { ModeToggle } from "@/components/mode-toggle"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -30,6 +31,7 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
                 DemandStudio
             </div>
             <div className="flex items-center gap-2">
+                <ModeToggle />
                 <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
                     <HelpCircle className="h-5 w-5" />
                 </Button>

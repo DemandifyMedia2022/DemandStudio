@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth"
 import { Greeting } from "@/components/dashboard/dashboard-widgets"
 import { OrgBentoNav } from "@/components/dashboard/org-bento-nav"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
+import { DashboardFeatureSection } from "@/components/dashboard/dashboard-feature-section"
 
 export default async function OrgDashboardPage(props: {
     params: Promise<{ orgSlug: string }>
@@ -45,12 +46,14 @@ export default async function OrgDashboardPage(props: {
     return (
         <div className="min-h-screen flex flex-col">
             <DashboardHeader user={session.user} />
-            <div className="flex-1 max-w-6xl w-full mx-auto space-y-8 p-4">
+            <div className="flex-1 max-w-[1400px] w-full mx-auto space-y-8 p-4">
                 <Greeting orgName={org.name} />
 
                 <div className="mb-8">
                     <OrgBentoNav orgSlug={org.slug} orgId={org.id} projects={org.projects} />
                 </div>
+
+                <DashboardFeatureSection />
             </div>
         </div>
     )

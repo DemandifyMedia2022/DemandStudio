@@ -70,7 +70,7 @@ export function OrgBentoNav({ orgSlug, orgId, projects = [] }: { orgSlug: string
             description: "Organization settings and configuration",
             link: `/dashboard/${orgSlug}/settings`,
             size: "medium",
-            variant: "glass",
+            variant: "default",
             tag: "Config",
             cta: "Configure"
         },

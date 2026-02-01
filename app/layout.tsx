@@ -6,7 +6,7 @@ import { Providers } from "./providers"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "CMS Portal - Content Management System",
+  title: "Demand Studio",
   description: "Complete CMS portal for managing posts and blogs",
 }
 

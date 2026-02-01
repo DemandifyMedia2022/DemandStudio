@@ -61,12 +61,11 @@ export default function NewContentItemPage() {
         if (!contentType) return
 
         try {
-            const res = await fetch("/api/content-items", {
+            const res = await fetch(`/api/content-items/${typeSlug}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    contentTypeId: contentType.id,
-                    data: JSON.stringify(data),
+                    data,
                     published
                 })
             })

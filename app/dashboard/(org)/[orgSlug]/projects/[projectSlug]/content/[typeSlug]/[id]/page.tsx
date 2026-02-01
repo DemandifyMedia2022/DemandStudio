@@ -29,7 +29,7 @@ export default function EditContentItemPage() {
     const fetchData = async () => {
         try {
             // Fetch Item
-            const itemRes = await fetch(`/api/content-items/${id}`)
+            const itemRes = await fetch(`/api/content-items/${typeSlug}/${id}`)
             if (!itemRes.ok) throw new Error("Failed to fetch item")
             const item = await itemRes.json()
 
@@ -62,11 +62,11 @@ export default function EditContentItemPage() {
 
     const handleSubmit = async (data: any, isPublished: boolean) => {
         try {
-            const res = await fetch(`/api/content-items/${id}`, {
+            const res = await fetch(`/api/content-items/${typeSlug}/${id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    data: JSON.stringify(data),
+                    data,
                     published: isPublished
                 })
             })
