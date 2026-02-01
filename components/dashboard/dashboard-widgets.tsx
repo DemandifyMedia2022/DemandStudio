@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Calendar, FileText, Settings, Star, ArrowRight, Layout, Bell, Activity } from "lucide-react"
 import Link from "next/link"
 import { formatDate } from "@/lib/utils"
+import { CursorHighlight } from "@/components/ui/cursor-highlight"
 
 export function Greeting({ orgName }: { orgName: string }) {
     // Determine time of day
@@ -14,8 +15,16 @@ export function Greeting({ orgName }: { orgName: string }) {
     else if (hour < 18) greeting = "Good afternoon"
 
     return (
-        <div className="flex flex-col gap-1 pb-8 text-center pt-4">
-            <h1 className="text-3xl font-bold tracking-tight">{greeting}, {orgName}</h1>
+        <div className="flex flex-col gap-1 pb-8 text-center pt-4" suppressHydrationWarning>
+            <h1 className="text-3xl font-bold tracking-tight">
+                {greeting}, <CursorHighlight
+                    containerClassName="inline-flex align-bottom"
+                    className="text-3xl font-bold tracking-tight"
+                    gradient="from-blue-600 via-purple-600 to-purple-700"
+                    rectangle={false}
+                    text={orgName}
+                />
+            </h1>
         </div>
     )
 }

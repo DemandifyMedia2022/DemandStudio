@@ -5,6 +5,7 @@ import { Greeting } from "@/components/dashboard/dashboard-widgets"
 import { OrgBentoNav } from "@/components/dashboard/org-bento-nav"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { DashboardFeatureSection } from "@/components/dashboard/dashboard-feature-section"
+import { Footer } from "@/components/footer"
 
 export default async function OrgDashboardPage(props: {
     params: Promise<{ orgSlug: string }>
@@ -55,6 +56,7 @@ export default async function OrgDashboardPage(props: {
 
                 <DashboardFeatureSection />
             </div>
+            <Footer />
         </div>
     )
 }
