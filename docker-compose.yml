@@ -8,33 +8,14 @@ services:
       dockerfile: Dockerfile
     restart: always
     ports:
-      - "3000:3000"
+      - "8051:3000"
     environment:
       - DATABASE_URL=mysql://root:Demandify%40766@20.244.10.206:3306/cms
-      - NEXTAUTH_URL=http://localhost:3000
-      - NEXTAUTH_SECRET=changeme_in_production
-    depends_on:
-      - db
-    networks:
-      - cms-network
-
-  db:
-    container_name: cms-db
-    image: mysql:8.0
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: cms
-    ports:
-      - "3307:3306" # Expose on 3307 to avoid conflict with local mysql if any
-    volumes:
-      - db_data:/var/lib/mysql
+      - NEXTAUTH_URL=http://20.244.10.206:8051
+      - NEXTAUTH_SECRET=your-production-secret-key-change-this-to-something-secure
     networks:
       - cms-network
 
 networks:
   cms-network:
     driver: bridge
-
-volumes:
-  db_data:

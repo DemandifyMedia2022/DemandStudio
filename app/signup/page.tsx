@@ -14,6 +14,7 @@ import { LayoutDashboard } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 
 const formSchema = z.object({
+    organizationName: z.string().min(2, { message: "Organization name must be at least 2 characters." }),
     name: z.string().min(2, { message: "Name must be at least 2 characters." }),
     email: z.string().email({ message: "Invalid email address." }),
     password: z.string().min(8, { message: "Password must be at least 8 characters." }),
@@ -28,6 +29,7 @@ export default function SignupPage() {
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: {
+            organizationName: "",
             name: "",
             email: "",
             password: "",
@@ -83,6 +85,19 @@ export default function SignupPage() {
                         <CardContent>
                             <Form {...form}>
                                 <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
+                                    <FormField
+                                        control={form.control}
+                                        name="organizationName"
+                                        render={({ field }: { field: ControllerRenderProps<FormValues, "organizationName"> }) => (
+                                            <FormItem>
+                                                <FormLabel>Organization Name</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="Acme Corp" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
                                     <FormField
                                         control={form.control}
                                         name="name"

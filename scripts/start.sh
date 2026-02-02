@@ -1,12 +1,7 @@
 #!/bin/sh
 set -e
 
-echo "Starting deployment..."
-
-# Run migrations
-echo "Running migrations..."
-npx prisma migrate deploy
-
-# Start the application
 echo "Starting application..."
+# Database is already configured on the server
+# No migrations needed - just start the app
 exec node server.js
