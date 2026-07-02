@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { prisma } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 
 export default async function DashboardPage() {
     const session = await auth()
@@ -14,11 +14,16 @@ export default async function DashboardPage() {
     }
 
     // Redirect to first org if user has one
-    const member = await prisma.organizationMember.findFirst({
-        where: { userId: session.user.id },
-        include: { organization: true },
-        orderBy: { createdAt: 'asc' }
-    })
+    const { rows } = await pool.query(
+        `SELECT om.*, row_to_json(o.*) AS organization
+         FROM "OrganizationMember" om
+         INNER JOIN "Organization" o ON o."id" = om."organizationId"
+         WHERE om."userId" = $1
+         ORDER BY om."createdAt" ASC
+         LIMIT 1`,
+        [session.user.id]
+    )
+    const member = rows[0]
 
     if (member) {
         redirect(`/dashboard/${member.organization.slug}`)

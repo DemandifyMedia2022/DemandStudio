@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { corsMiddleware, corsHeaders } from '@/lib/cors'
+import { pool } from '@/lib/db'
+import { corsMiddleware } from '@/lib/cors'
 import { apiSuccessResponse, apiErrorResponse } from '@/lib/api-auth'
 
 export async function OPTIONS(request: NextRequest) {
@@ -12,29 +12,25 @@ export async function GET(
   props: { params: Promise<{ slug: string }> }
 ) {
   const params = await props.params
-  // Handle CORS preflight
   const corsResponse = corsMiddleware(request)
   if (corsResponse) return corsResponse
 
   try {
-    const post = await prisma.post.findUnique({
-      where: { slug: params.slug },
-      include: {
-        author: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-    })
+    const { rows } = await pool.query(
+      `SELECT p.*,
+        CASE WHEN u."id" IS NULL THEN NULL ELSE json_build_object('id', u."id", 'name', u."name", 'email', u."email") END AS author
+       FROM "Post" p
+       LEFT JOIN "User" u ON u."id" = p."authorId"
+       WHERE p."slug" = $1
+       LIMIT 1`,
+      [params.slug]
+    )
+    const post = rows[0]
 
     if (!post) {
       return apiErrorResponse('Post not found', 404, request)
     }
 
-    // Only return published posts in public API (unless authenticated)
     if (!post.published) {
       return apiErrorResponse('Post not found', 404, request)
     }
@@ -45,4 +41,3 @@ export async function GET(
     return apiErrorResponse('Failed to fetch post', 500, request)
   }
 }
-

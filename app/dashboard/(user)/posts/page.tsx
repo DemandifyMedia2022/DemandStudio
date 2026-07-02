@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { prisma } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -16,19 +16,13 @@ import { format } from "date-fns"
 import { DeletePostButton } from "@/components/posts/delete-button"
 
 export default async function PostsPage() {
-  const posts = await prisma.post.findMany({
-    include: {
-      author: {
-        select: {
-          name: true,
-          email: true,
-        },
-      },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  })
+  const { rows: posts } = await pool.query(
+    `SELECT p.*,
+      CASE WHEN u."id" IS NULL THEN NULL ELSE json_build_object('name', u."name", 'email', u."email") END AS author
+     FROM "Post" p
+     LEFT JOIN "User" u ON u."id" = p."authorId"
+     ORDER BY p."createdAt" DESC`
+  )
 
   return (
     <div>

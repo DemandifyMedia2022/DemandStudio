@@ -1,8 +1,18 @@
-
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { z } from "zod"
+import { pool } from "@/lib/db"
+import crypto from "crypto"
+
+async function getContentType(id: string) {
+    const { rows } = await pool.query(`SELECT * FROM "ContentType" WHERE "id" = $1 LIMIT 1`, [id])
+    const contentType = rows[0]
+    if (!contentType) return null
+    const fieldsResult = await pool.query(
+        `SELECT * FROM "ContentField" WHERE "contentTypeId" = $1 ORDER BY "order" ASC`,
+        [id]
+    )
+    return { ...contentType, fields: fieldsResult.rows }
+}
 
 export async function GET(
     request: NextRequest,
@@ -15,14 +25,7 @@ export async function GET(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        const contentType = await prisma.contentType.findUnique({
-            where: { id: params.id },
-            include: {
-                fields: {
-                    orderBy: { order: "asc" },
-                },
-            },
-        })
+        const contentType = await getContentType(params.id)
 
         if (!contentType) {
             return NextResponse.json({ error: "Content type not found" }, { status: 404 })
@@ -48,69 +51,53 @@ export async function PUT(
 
         const body = await request.json()
         const { name, description, fields } = body
+        const client = await pool.connect()
 
-        // Updates basic info and handles fields transactionally if needed
-        // For simplicity, we'll update the type and then handle fields logic if provided
-        // Ideally, fields management might be separate or part of this. 
-        // Here implies a full update of fields structure.
-
-        const contentType = await prisma.$transaction(async (tx) => {
-            // Update basic info
-            const updatedConf = await tx.contentType.update({
-                where: { id: params.id },
-                data: {
-                    name,
-                    description,
-                },
-                include: {
-                    fields: {
-                        orderBy: { order: "asc" },
-                    },
-                },
-            })
+        try {
+            await client.query("BEGIN")
+            await client.query(
+                `UPDATE "ContentType" SET "name" = $1, "description" = $2, "updatedAt" = $3 WHERE "id" = $4`,
+                [name, description || null, new Date(), params.id]
+            )
 
             if (fields && Array.isArray(fields)) {
-                // Delete existing fields not present in update (if we are doing full sync)
-                // Or simplified: This endpoint might just update metadata, 
-                // and a separate endpoint or logic handles fields. 
-                // Let's assume this updates fields too.
-
-                // 1. Delete all existing fields (simplest strategy for full sync editor)
-                //    OR update efficiently. Let's delete and recreate/create-many for simplicity 
-                //    BUT this destroys data references if not careful. 
-                //    Better: Upsert based on ID.
-
                 for (const [index, field] of fields.entries()) {
-                    const fieldData = {
-                        name: field.name,
-                        key: field.key,
-                        type: field.type,
-                        required: field.required ?? false,
-                        options: field.options ? JSON.stringify(field.options) : null,
-                        order: index,
-                        contentTypeId: params.id,
-                    }
+                    const fieldData = [
+                        field.name,
+                        field.key,
+                        field.type,
+                        field.required ?? false,
+                        field.options ? JSON.stringify(field.options) : null,
+                        index,
+                        params.id,
+                    ]
 
                     if (field.id && !field.id.startsWith("temp-")) {
-                        await tx.contentField.update({
-                            where: { id: field.id },
-                            data: fieldData,
-                        })
+                        await client.query(
+                            `UPDATE "ContentField"
+                             SET "name" = $1, "key" = $2, "type" = $3, "required" = $4, "options" = $5, "order" = $6, "contentTypeId" = $7
+                             WHERE "id" = $8`,
+                            [...fieldData, field.id]
+                        )
                     } else {
-                        await tx.contentField.create({
-                            data: fieldData,
-                        })
+                        await client.query(
+                            `INSERT INTO "ContentField" ("id", "name", "key", "type", "required", "options", "order", "contentTypeId")
+                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                            [crypto.randomUUID(), ...fieldData]
+                        )
                     }
                 }
-
-                // Handle deletions: keys/ids not in the new list should be deleted?
-                // For now, let's trust the user or add specific delete logic if requested.
-                // To be safe, let's keep it additive/update for now.
             }
 
-            return updatedConf
-        })
+            await client.query("COMMIT")
+        } catch (error) {
+            await client.query("ROLLBACK")
+            throw error
+        } finally {
+            client.release()
+        }
 
+        const contentType = await getContentType(params.id)
         return NextResponse.json(contentType)
 
     } catch (error) {
@@ -130,9 +117,7 @@ export async function DELETE(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        await prisma.contentType.delete({
-            where: { id: params.id },
-        })
+        await pool.query(`DELETE FROM "ContentType" WHERE "id" = $1`, [params.id])
 
         return NextResponse.json({ success: true })
     } catch (error) {

@@ -1,91 +1,81 @@
 import { NextRequest } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { corsMiddleware, corsHeaders } from '@/lib/cors'
+import { pool } from '@/lib/db'
+import { corsMiddleware } from '@/lib/cors'
 import { apiSuccessResponse, apiErrorResponse } from '@/lib/api-auth'
 
 export async function OPTIONS(request: NextRequest) {
   return corsMiddleware(request) || new Response(null, { status: 200 })
 }
 
+function buildBlogWhere(searchParams: URLSearchParams) {
+  const params: any[] = []
+  const clauses: string[] = []
+  const published = searchParams.get('published')
+  const featured = searchParams.get('featured')
+  const category = searchParams.get('category')
+  const search = searchParams.get('search')
+  const tags = searchParams.get('tags')
+
+  params.push(published !== null ? published === 'true' : true)
+  clauses.push(`b."published" = $${params.length}`)
+
+  if (featured === 'true') {
+    params.push(true)
+    clauses.push(`b."featured" = $${params.length}`)
+  }
+
+  if (category) {
+    params.push(category)
+    clauses.push(`b."category" = $${params.length}`)
+  }
+
+  const orParts: string[] = []
+  if (search) {
+    params.push(`%${search}%`)
+    const idx = params.length
+    orParts.push(`b."title" ILIKE $${idx}`, `b."content" ILIKE $${idx}`, `b."excerpt" ILIKE $${idx}`)
+  }
+
+  if (tags) {
+    for (const tag of tags.split(',').map(tag => tag.trim()).filter(Boolean)) {
+      params.push(`%${tag}%`)
+      orParts.push(`b."tags" ILIKE $${params.length}`)
+    }
+  }
+
+  if (orParts.length) clauses.push(`(${orParts.join(' OR ')})`)
+  return { whereSql: clauses.join(' AND '), params }
+}
+
 export async function GET(request: NextRequest) {
-  // Handle CORS preflight
   const corsResponse = corsMiddleware(request)
   if (corsResponse) return corsResponse
 
   try {
     const { searchParams } = new URL(request.url)
-    const published = searchParams.get('published')
-    const featured = searchParams.get('featured')
-    const category = searchParams.get('category')
     const limit = parseInt(searchParams.get('limit') || '10')
     const offset = parseInt(searchParams.get('offset') || '0')
-    const search = searchParams.get('search')
-    const tags = searchParams.get('tags')
+    const { whereSql, params } = buildBlogWhere(searchParams)
 
-    const where: any = {}
-
-    // Filter by published status
-    if (published !== null) {
-      where.published = published === 'true'
-    } else {
-      // Default to only published blogs for public API
-      where.published = true
-    }
-
-    // Filter by featured
-    if (featured === 'true') {
-      where.featured = true
-    }
-
-    // Filter by category
-    if (category) {
-      where.category = category
-    }
-
-    // Search in title and content (SQLite compatible)
-    if (search) {
-      where.OR = [
-        { title: { contains: search } },
-        { content: { contains: search } },
-        { excerpt: { contains: search } },
-      ]
-    }
-
-    // Filter by tags (SQLite compatible - using contains for comma-separated tags)
-    if (tags) {
-      const tagArray = tags.split(',').map(tag => tag.trim())
-      where.OR = [
-        ...(where.OR || []),
-        ...tagArray.map(tag => ({
-          tags: { contains: tag },
-        })),
-      ]
-    }
-
-    const [blogs, total] = await Promise.all([
-      prisma.blog.findMany({
-        where,
-        include: {
-          author: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-        orderBy: {
-          publishedAt: 'desc',
-        },
-        take: limit,
-        skip: offset,
-      }),
-      prisma.blog.count({ where }),
-    ])
+    const blogsResult = await pool.query(
+      `SELECT b.*,
+        CASE WHEN u."id" IS NULL THEN NULL ELSE json_build_object('id', u."id", 'name', u."name", 'email', u."email") END AS author
+       FROM "Blog" b
+       LEFT JOIN "User" u ON u."id" = b."authorId"
+       WHERE ${whereSql}
+       ORDER BY b."publishedAt" DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limit, offset]
+    )
+    const totalResult = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM "Blog" b WHERE ${whereSql}`,
+      params
+    )
+    const total = totalResult.rows[0]?.count ?? 0
 
     return apiSuccessResponse(
       {
-        data: blogs,
+        data: blogsResult.rows,
         pagination: {
           total,
           limit,
@@ -101,4 +91,3 @@ export async function GET(request: NextRequest) {
     return apiErrorResponse('Failed to fetch blogs', 500, request)
   }
 }
-

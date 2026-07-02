@@ -1,14 +1,7 @@
-
 import { auth } from "@/lib/auth"
-import { prisma as db } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { NextResponse } from "next/server"
 import * as z from "zod"
-
-const routeContextSchema = z.object({
-    params: z.object({
-        id: z.string(),
-    }),
-})
 
 export async function DELETE(
     req: Request,
@@ -22,34 +15,28 @@ export async function DELETE(
             return new NextResponse("Unauthorized", { status: 401 })
         }
 
-        const project = await db.project.findUnique({
-            where: { id: params.id },
-            select: { organizationId: true }
-        })
+        const projectResult = await pool.query(
+            `SELECT "organizationId" FROM "Project" WHERE "id" = $1 LIMIT 1`,
+            [params.id]
+        )
+        const project = projectResult.rows[0]
 
         if (!project) {
             return new NextResponse("Not Found", { status: 404 })
         }
 
         // Check membership
-        const membership = await db.organizationMember.findUnique({
-            where: {
-                organizationId_userId: {
-                    organizationId: project.organizationId,
-                    userId: session.user.id,
-                },
-            },
-        })
+        const membershipResult = await pool.query(
+            `SELECT "role" FROM "OrganizationMember" WHERE "organizationId" = $1 AND "userId" = $2 LIMIT 1`,
+            [project.organizationId, session.user.id]
+        )
+        const membership = membershipResult.rows[0]
 
         if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
             return new NextResponse("Forbidden", { status: 403 })
         }
 
-        await db.project.delete({
-            where: {
-                id: params.id,
-            },
-        })
+        await pool.query(`DELETE FROM "Project" WHERE "id" = $1`, [params.id])
 
         return new NextResponse(null, { status: 204 })
     } catch (error) {

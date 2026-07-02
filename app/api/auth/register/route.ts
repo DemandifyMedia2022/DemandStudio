@@ -1,8 +1,8 @@
-
 import { NextResponse } from "next/server"
 import { hash } from "bcryptjs"
-import { prisma } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { z } from "zod"
+import crypto from "crypto"
 
 // Define validation schema
 const userSchema = z.object({
@@ -18,11 +18,12 @@ export async function POST(req: Request) {
         const { email, password, name, organizationName } = userSchema.parse(body)
 
         // Check if email already exists
-        const existingUser = await prisma.user.findUnique({
-            where: { email },
-        })
+        const existingResult = await pool.query(
+            `SELECT "id" FROM "User" WHERE "email" = $1 LIMIT 1`,
+            [email]
+        )
 
-        if (existingUser) {
+        if (existingResult.rows[0]) {
             return NextResponse.json(
                 { user: null, message: "User with this email already exists" },
                 { status: 409 }
@@ -32,17 +33,19 @@ export async function POST(req: Request) {
         // Hash password
         const hashedPassword = await hash(password, 10)
 
-        // Create new user, organization, and membership in a transaction
-        const result = await prisma.$transaction(async (tx) => {
+        const client = await pool.connect()
+        try {
+            await client.query("BEGIN")
+            const now = new Date()
+
             // 1. Create User
-            const user = await tx.user.create({
-                data: {
-                    email,
-                    name,
-                    password: hashedPassword,
-                    role: "user", // Explicitly set role to user
-                },
-            })
+            const userResult = await client.query(
+                `INSERT INTO "User" ("id", "email", "name", "password", "role", "createdAt", "updatedAt")
+                 VALUES ($1, $2, $3, $4, $5, $6, $6)
+                 RETURNING *`,
+                [crypto.randomUUID(), email, name, hashedPassword, "user", now]
+            )
+            const user = userResult.rows[0]
 
             // 2. Generate Organization Slug
             // Slug based on Organization Name
@@ -50,40 +53,41 @@ export async function POST(req: Request) {
             const slug = `${baseSlug}-${Date.now()}`
 
             // 3. Create Organization
-            const organization = await tx.organization.create({
-                data: {
-                    name: organizationName,
-                    slug: slug,
-                },
-            })
+            const organizationResult = await client.query(
+                `INSERT INTO "Organization" ("id", "name", "slug", "createdAt", "updatedAt")
+                 VALUES ($1, $2, $3, $4, $4)
+                 RETURNING *`,
+                [crypto.randomUUID(), organizationName, slug, now]
+            )
+            const organization = organizationResult.rows[0]
 
             // 4. Create Membership (Owner)
-            await tx.organizationMember.create({
-                data: {
-                    userId: user.id,
-                    organizationId: organization.id,
-                    role: "OWNER",
+            await client.query(
+                `INSERT INTO "OrganizationMember" ("id", "userId", "organizationId", "role", "createdAt", "updatedAt")
+                 VALUES ($1, $2, $3, $4, $5, $5)`,
+                [crypto.randomUUID(), user.id, organization.id, "OWNER", now]
+            )
+
+            await client.query("COMMIT")
+
+            // Remove password from response
+            const { password: newUserPassword, ...rest } = user
+
+            return NextResponse.json(
+                {
+                    user: rest,
+                    message: "User created successfully",
+                    redirectUrl: `/dashboard/${organization.slug}`,
+                    organizationSlug: organization.slug
                 },
-            })
-
-            return { user, organization }
-        })
-
-        const newUser = result.user
-        const newOrg = result.organization
-
-        // Remove password from response
-        const { password: newUserPassword, ...rest } = newUser
-
-        return NextResponse.json(
-            {
-                user: rest,
-                message: "User created successfully",
-                redirectUrl: `/dashboard/${newOrg.slug}`,
-                organizationSlug: newOrg.slug
-            },
-            { status: 201 }
-        )
+                { status: 201 }
+            )
+        } catch (error) {
+            await client.query("ROLLBACK")
+            throw error
+        } finally {
+            client.release()
+        }
     } catch (error) {
         if (error instanceof z.ZodError) {
             return NextResponse.json(

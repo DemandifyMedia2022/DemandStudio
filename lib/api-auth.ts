@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from './prisma'
-import { corsHeaders, corsMiddleware } from './cors'
+import { pool } from './db'
+import { corsHeaders } from './cors'
 
 export async function validateApiKey(request: NextRequest): Promise<{ valid: boolean; userId?: string; error?: string }> {
   // Check for API key in header
@@ -11,10 +11,11 @@ export async function validateApiKey(request: NextRequest): Promise<{ valid: boo
   }
 
   try {
-    const keyRecord = await prisma.apiKey.findUnique({
-      where: { key: apiKey },
-      include: { user: true },
-    })
+    const { rows } = await pool.query(
+      `SELECT * FROM "ApiKey" WHERE "key" = $1 LIMIT 1`,
+      [apiKey]
+    )
+    const keyRecord = rows[0]
 
     if (!keyRecord || !keyRecord.active) {
       return { valid: false, error: 'Invalid or inactive API key' }
@@ -26,10 +27,10 @@ export async function validateApiKey(request: NextRequest): Promise<{ valid: boo
     }
 
     // Update last used timestamp
-    await prisma.apiKey.update({
-      where: { id: keyRecord.id },
-      data: { lastUsed: new Date() },
-    })
+    await pool.query(
+      `UPDATE "ApiKey" SET "lastUsed" = $1, "updatedAt" = $1 WHERE "id" = $2`,
+      [new Date(), keyRecord.id]
+    )
 
     return { valid: true, userId: keyRecord.userId }
   } catch (error) {
@@ -54,4 +55,3 @@ export function apiSuccessResponse(data: any, status: number = 200, request: Nex
     headers: corsHeaders(request),
   })
 }
-

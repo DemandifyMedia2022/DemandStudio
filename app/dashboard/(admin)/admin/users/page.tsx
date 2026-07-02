@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { prisma as db } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { UsersList } from "@/components/admin/users-list"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
@@ -12,12 +12,7 @@ export default async function AdminUsersPage() {
         redirect("/login")
     }
 
-    const users = await db.user.findMany({
-        orderBy: {
-            createdAt: 'desc'
-        },
-        take: 50 // Limit for now
-    })
+    const { rows: users } = await pool.query(`SELECT * FROM "User" ORDER BY "createdAt" DESC LIMIT 50`)
 
     return (
         <div className="space-y-6">

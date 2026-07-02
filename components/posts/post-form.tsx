@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ImageUploader } from "@/components/ui/image-uploader"
 
 const postSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -188,23 +189,18 @@ export function PostForm({ userId, post, organizationId, projectId, redirectUrl 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="image">Image URL</Label>
-            <Input
-              id="image"
-              {...register("image")}
-              placeholder="https://example.com/image.jpg"
+            <ImageUploader
+              label="Cover Image"
+              value={watch("image") || ""}
+              onChange={(url) => setValue("image", url, { shouldValidate: true })}
             />
           </div>
 
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="published"
-                {...register("published")}
-                className="h-4 w-4"
-              />
-              <Label htmlFor="published">Published</Label>
+            <div className="text-sm font-medium px-3 py-1.5 rounded-md border bg-muted">
+              Status: <span className={watch("published") ? "text-green-600 font-bold" : "text-amber-600 font-bold"}>
+                {watch("published") ? "Published" : "Draft"}
+              </span>
             </div>
             <div className="flex items-center space-x-2">
               <input
@@ -218,8 +214,26 @@ export function PostForm({ userId, post, organizationId, projectId, redirectUrl 
           </div>
 
           <div className="flex gap-2">
-            <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : post ? "Update Post" : "Create Post"}
+            <Button 
+              type="button" 
+              variant="secondary" 
+              disabled={loading}
+              onClick={async () => {
+                setValue("published", false)
+                await handleSubmit(onSubmit)()
+              }}
+            >
+              {loading && !watch("published") ? "Saving Draft..." : "Save as Draft"}
+            </Button>
+            <Button 
+              type="button" 
+              disabled={loading}
+              onClick={async () => {
+                setValue("published", true)
+                await handleSubmit(onSubmit)()
+              }}
+            >
+              {loading && watch("published") ? "Publishing..." : "Publish"}
             </Button>
             <Button
               type="button"

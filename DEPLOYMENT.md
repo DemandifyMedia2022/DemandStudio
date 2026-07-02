@@ -129,8 +129,8 @@ ssh root@20.244.10.206
 # Navigate to app directory
 cd /opt/cms
 
-# Run migrations
-docker-compose exec app npx prisma migrate deploy
+# Apply database changes
+# Run the SQL in migration.sql against your PostgreSQL database when schema changes are needed.
 
 # Seed admin user (if needed)
 docker-compose exec app npm run db:seed
@@ -196,7 +196,7 @@ docker-compose up -d
 
 ```bash
 # Backup database
-docker-compose exec app npx prisma db pull
+docker-compose exec app node -e "console.log(process.env.DATABASE_URL ? 'DATABASE_URL set' : 'DATABASE_URL missing')"
 ```
 
 ## Troubleshooting
@@ -214,7 +214,7 @@ docker-compose exec app npx prisma db pull
 3. Ensure database `cms` exists
 4. Test connection:
    ```bash
-   docker-compose exec app npx prisma db pull
+   docker-compose exec app node -e "console.log(process.env.DATABASE_URL ? 'DATABASE_URL set' : 'DATABASE_URL missing')"
    ```
 
 ### Port Already in Use

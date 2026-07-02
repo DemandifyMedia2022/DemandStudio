@@ -1,8 +1,8 @@
-
 import { auth } from "@/lib/auth"
-import { prisma as db } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { NextResponse } from "next/server"
 import * as z from "zod"
+import crypto from "crypto"
 
 const orgCreateSchema = z.object({
     name: z.string().min(2),
@@ -17,20 +17,13 @@ export async function GET(req: Request) {
             return new NextResponse("Unauthorized", { status: 401 })
         }
 
-        const orgs = await db.organization.findMany({
-            where: {
-                members: {
-                    some: {
-                        userId: session.user.id
-                    }
-                }
-            },
-            select: {
-                id: true,
-                name: true,
-                slug: true
-            }
-        })
+        const { rows: orgs } = await pool.query(
+            `SELECT o."id", o."name", o."slug"
+             FROM "Organization" o
+             INNER JOIN "OrganizationMember" om ON om."organizationId" = o."id"
+             WHERE om."userId" = $1`,
+            [session.user.id]
+        )
 
         return NextResponse.json(orgs)
     } catch (error) {
@@ -53,28 +46,41 @@ export async function POST(req: Request) {
         const body = orgCreateSchema.parse(json)
 
         // Check if slug exists
-        const existing = await db.organization.findUnique({
-            where: { slug: body.slug }
-        })
+        const existingResult = await pool.query(
+            `SELECT "id" FROM "Organization" WHERE "slug" = $1 LIMIT 1`,
+            [body.slug]
+        )
 
-        if (existing) {
+        if (existingResult.rows[0]) {
             return new NextResponse("Organization with this slug already exists", { status: 409 })
         }
 
-        const org = await db.organization.create({
-            data: {
-                name: body.name,
-                slug: body.slug,
-                members: {
-                    create: {
-                        userId: session.user.id,
-                        role: "OWNER"
-                    }
-                }
-            }
-        })
+        const client = await pool.connect()
+        try {
+            await client.query("BEGIN")
+            const now = new Date()
+            const orgResult = await client.query(
+                `INSERT INTO "Organization" ("id", "name", "slug", "createdAt", "updatedAt")
+                 VALUES ($1, $2, $3, $4, $4)
+                 RETURNING *`,
+                [crypto.randomUUID(), body.name, body.slug, now]
+            )
+            const org = orgResult.rows[0]
 
-        return NextResponse.json(org)
+            await client.query(
+                `INSERT INTO "OrganizationMember" ("id", "organizationId", "userId", "role", "createdAt", "updatedAt")
+                 VALUES ($1, $2, $3, $4, $5, $5)`,
+                [crypto.randomUUID(), org.id, session.user.id, "OWNER", now]
+            )
+
+            await client.query("COMMIT")
+            return NextResponse.json(org)
+        } catch (error) {
+            await client.query("ROLLBACK")
+            throw error
+        } finally {
+            client.release()
+        }
     } catch (error) {
         if (error instanceof z.ZodError) {
             return new NextResponse(JSON.stringify(error.issues), { status: 422 })

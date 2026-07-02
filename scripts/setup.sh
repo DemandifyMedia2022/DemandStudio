@@ -1,14 +1,11 @@
 #!/bin/bash
 
+set -e
+
 echo "Setting up CMS Portal..."
 
-# Generate Prisma Client
-echo "Generating Prisma Client..."
-npm run db:generate
-
-# Push database schema
-echo "Pushing database schema..."
-npm run db:push
+echo "Install dependencies with npm install if you have not already."
+echo "Make sure DATABASE_URL points at your PostgreSQL database."
 
 # Create admin user
 echo "Creating admin user..."
@@ -21,4 +18,3 @@ echo "Setup complete!"
 echo ""
 echo "To start the development server, run: npm run dev"
 echo "Then visit http://localhost:3000"
-

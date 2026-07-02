@@ -1,6 +1,5 @@
-
 import { auth } from "@/lib/auth"
-import { prisma as db } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { NextResponse } from "next/server"
 
 export async function GET(
@@ -16,33 +15,22 @@ export async function GET(
         }
 
         // Verify membership
-        const membership = await db.organizationMember.findUnique({
-            where: {
-                organizationId_userId: {
-                    organizationId: routeParams.id,
-                    userId: session.user.id
-                }
-            }
-        })
+        const membershipResult = await pool.query(
+            `SELECT "id" FROM "OrganizationMember" WHERE "organizationId" = $1 AND "userId" = $2 LIMIT 1`,
+            [routeParams.id, session.user.id]
+        )
 
-        if (!membership) {
+        if (!membershipResult.rows[0]) {
             return new NextResponse("Forbidden", { status: 403 })
         }
 
-        const projects = await db.project.findMany({
-            where: {
-                organizationId: routeParams.id
-            },
-            select: {
-                id: true,
-                name: true,
-                slug: true,
-                description: true,
-            },
-            orderBy: {
-                createdAt: 'desc'
-            }
-        })
+        const { rows: projects } = await pool.query(
+            `SELECT "id", "name", "slug", "description"
+             FROM "Project"
+             WHERE "organizationId" = $1
+             ORDER BY "createdAt" DESC`,
+            [routeParams.id]
+        )
 
         return NextResponse.json(projects)
     } catch (error) {

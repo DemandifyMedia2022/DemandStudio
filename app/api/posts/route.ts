@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { pool } from "@/lib/db"
+import crypto from "crypto"
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,35 +15,44 @@ export async function POST(request: NextRequest) {
     const { title, slug, content, excerpt, published, featured, tags, image, authorId, publishedAt } = body
 
     // Check if slug already exists
-    const existingPost = await prisma.post.findUnique({
-      where: { slug },
-    })
+    const existingResult = await pool.query(
+      `SELECT "id" FROM "Post" WHERE "slug" = $1 LIMIT 1`,
+      [slug]
+    )
 
-    if (existingPost) {
+    if (existingResult.rows[0]) {
       return NextResponse.json(
         { error: "A post with this slug already exists" },
         { status: 400 }
       )
     }
 
-    const post = await prisma.post.create({
-      data: {
+    const now = new Date()
+    const { rows } = await pool.query(
+      `INSERT INTO "Post" (
+        "id", "title", "slug", "content", "excerpt", "published", "featured", "tags", "image",
+        "authorId", "publishedAt", "organizationId", "projectId", "createdAt", "updatedAt"
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
+       RETURNING *`,
+      [
+        crypto.randomUUID(),
         title,
         slug,
         content,
-        excerpt: excerpt || null,
-        published: published || false,
-        featured: featured || false,
-        tags: tags || null,
-        image: image || null,
+        excerpt || null,
+        published || false,
+        featured || false,
+        tags || null,
+        image || null,
         authorId,
-        publishedAt: publishedAt ? new Date(publishedAt) : null,
-        organizationId: body.organizationId,
-        projectId: body.projectId,
-      },
-    })
+        publishedAt ? new Date(publishedAt) : null,
+        body.organizationId || null,
+        body.projectId || null,
+        now,
+      ]
+    )
 
-    return NextResponse.json(post, { status: 201 })
+    return NextResponse.json(rows[0], { status: 201 })
   } catch (error) {
     console.error("Error creating post:", error)
     return NextResponse.json(
@@ -60,19 +70,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const posts = await prisma.post.findMany({
-      include: {
-        author: {
-          select: {
-            name: true,
-            email: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    })
+    const { rows: posts } = await pool.query(
+      `SELECT p.*,
+        CASE
+          WHEN u."id" IS NULL THEN NULL
+          ELSE json_build_object('name', u."name", 'email', u."email")
+        END AS author
+       FROM "Post" p
+       LEFT JOIN "User" u ON u."id" = p."authorId"
+       ORDER BY p."createdAt" DESC`
+    )
 
     return NextResponse.json(posts)
   } catch (error) {

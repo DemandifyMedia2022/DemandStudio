@@ -1,6 +1,6 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
-import { prisma } from "./prisma"
+import { pool } from "./db"
 import bcrypt from "bcryptjs"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -14,25 +14,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        const identifier = String(credentials?.email || "").trim()
+        const password = String(credentials?.password || "")
+
+        if (!identifier || !password) {
           return null
         }
 
-        const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email as string
-          }
-        })
-
-        if (!user || !user.password) {
-          return null
-        }
-
-        const isPasswordValid = await bcrypt.compare(
-          credentials.password as string,
-          user.password
+        const { rows } = await pool.query(
+          `SELECT "id", "email", "name", "password", "role"
+           FROM "User"
+           WHERE lower("email") = lower($1) OR "id" = $1
+           LIMIT 1`,
+          [identifier]
         )
+        const user = rows[0]
 
+        if (!user?.password) {
+          return null
+        }
+
+        const isPasswordValid = await bcrypt.compare(password, user.password)
         if (!isPasswordValid) {
           return null
         }

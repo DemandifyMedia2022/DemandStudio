@@ -5,8 +5,10 @@ import { Editor } from "@/components/blocks/editor-x/editor"
 export function ClientSideContent({ content }: { content: string }) {
     let parsedContent = undefined
     try {
-        if (content && content.trim().startsWith("{")) {
+        if (content && typeof content === 'string' && content.trim().startsWith("{")) {
             parsedContent = JSON.parse(content)
+        } else if (content && typeof content === 'object') {
+            parsedContent = content;
         }
     } catch (e) {
         console.error("Failed to parse content", e)

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { prisma } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { Metadata } from "next"
 import { ClientSideContent } from "./client-content"
 
@@ -13,14 +13,14 @@ interface BlogPostProps {
 }
 
 async function getBlogPost(slug: string) {
-    const blog = await prisma.blog.findUnique({
-        where: {
-            slug: slug,
-        },
-        include: {
-            author: true,
-        },
-    })
+    const { rows } = await pool.query(
+        `SELECT b.*, row_to_json(u.*) AS author
+         FROM "Blog" b
+         LEFT JOIN "User" u ON u."id" = b."authorId"
+         WHERE b."slug" = $1
+         LIMIT 1`,
+        [slug]
+    )
 
     // Start with finding just by slug.
     // In a real app we might check published status, but for "Preview" 
@@ -28,7 +28,7 @@ async function getBlogPost(slug: string) {
     // We could add logic to only show unpublished if the user is authenticated, 
     // but for now let's just show it.
 
-    return blog
+    return rows[0] ?? null
 }
 
 export async function generateMetadata({ params }: BlogPostProps): Promise<Metadata> {
@@ -66,8 +66,8 @@ export default async function BlogPostPage({ params }: BlogPostProps) {
     let faqSchema = null
 
     try {
-        if (blog.jsonLd) jsonLd = JSON.parse(blog.jsonLd)
-        if (blog.faqSchema) faqSchema = JSON.parse(blog.faqSchema)
+        if (blog.jsonLd) jsonLd = typeof blog.jsonLd === 'string' ? JSON.parse(blog.jsonLd) : blog.jsonLd
+        if (blog.faqSchema) faqSchema = typeof blog.faqSchema === 'string' ? JSON.parse(blog.faqSchema) : blog.faqSchema
     } catch (e) {
         console.error("Error parsing schema", e)
     }
@@ -145,7 +145,7 @@ export default async function BlogPostPage({ params }: BlogPostProps) {
                     <div className="space-y-6">
                         {(() => {
                             try {
-                                const faqs = JSON.parse(blog.faqs);
+                                const faqs = typeof blog.faqs === 'string' ? JSON.parse(blog.faqs) : blog.faqs;
                                 if (Array.isArray(faqs)) {
                                     return faqs.map((faq: any, i: number) => (
                                         <div key={i} className="space-y-2">

@@ -17,9 +17,10 @@ import { toast } from "sonner"
 
 interface DeleteContentItemButtonProps {
     itemId: string
+    typeSlug: string
 }
 
-export function DeleteContentItemButton({ itemId }: DeleteContentItemButtonProps) {
+export function DeleteContentItemButton({ itemId, typeSlug }: DeleteContentItemButtonProps) {
     const router = useRouter()
     const [open, setOpen] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
@@ -27,7 +28,7 @@ export function DeleteContentItemButton({ itemId }: DeleteContentItemButtonProps
     const handleDelete = async () => {
         setIsDeleting(true)
         try {
-            const res = await fetch(`/api/content-items/${itemId}`, {
+            const res = await fetch(`/api/content-items/${typeSlug}/${itemId}`, {
                 method: "DELETE",
             })
 

@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { prisma } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FileText, BookOpen, Eye, EyeOff } from "lucide-react"
 
@@ -11,12 +11,16 @@ export default async function DashboardOverviewPage() {
         redirect("/login")
     }
 
-    const [postsCount, blogsCount, publishedPosts, publishedBlogs] = await Promise.all([
-        prisma.post.count(),
-        prisma.blog.count(),
-        prisma.post.count({ where: { published: true } }),
-        prisma.blog.count({ where: { published: true } }),
+        const [postsCountResult, blogsCountResult, publishedPostsResult, publishedBlogsResult] = await Promise.all([
+        pool.query(`SELECT COUNT(*)::int AS count FROM "Post"`),
+        pool.query(`SELECT COUNT(*)::int AS count FROM "Blog"`),
+        pool.query(`SELECT COUNT(*)::int AS count FROM "Post" WHERE "published" = $1`, [true]),
+        pool.query(`SELECT COUNT(*)::int AS count FROM "Blog" WHERE "published" = $1`, [true]),
     ])
+    const postsCount = postsCountResult.rows[0]?.count ?? 0
+    const blogsCount = blogsCountResult.rows[0]?.count ?? 0
+    const publishedPosts = publishedPostsResult.rows[0]?.count ?? 0
+    const publishedBlogs = publishedBlogsResult.rows[0]?.count ?? 0
 
     return (
         <div>

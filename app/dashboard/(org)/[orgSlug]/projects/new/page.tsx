@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { prisma as db } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { auth } from "@/lib/auth"
 import { CreateProjectForm } from "@/components/dashboard/create-project-form"
 
@@ -13,21 +13,19 @@ export default async function CreateProjectPage(props: {
         return notFound()
     }
 
-    const org = await db.organization.findUnique({
-        where: {
-            slug: params.orgSlug,
-        },
-        select: {
-            id: true,
-            name: true,
-            slug: true,
-            members: {
-                where: {
-                    userId: session.user.id,
-                },
-            },
-        },
-    })
+    const orgResult = await pool.query(
+        `SELECT "id", "name", "slug" FROM "Organization" WHERE "slug" = $1 LIMIT 1`,
+        [params.orgSlug]
+    )
+    const org = orgResult.rows[0]
+
+    if (org) {
+        const membersResult = await pool.query(
+            `SELECT * FROM "OrganizationMember" WHERE "organizationId" = $1 AND "userId" = $2`,
+            [org.id, session.user.id]
+        )
+        org.members = membersResult.rows
+    }
 
     if (!org) {
         notFound()

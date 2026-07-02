@@ -1,6 +1,6 @@
 # CMS Portal - Content Management System
 
-A complete CMS portal built with Next.js, TypeScript, shadcn/ui, and Prisma. Similar to Sanity Studio, this application allows you to manage posts and blogs with a modern, intuitive interface.
+A complete CMS portal built with Next.js, TypeScript, shadcn/ui, and PostgreSQL. Similar to Sanity Studio, this application allows you to manage posts and blogs with a modern, intuitive interface.
 
 ## Features
 
@@ -21,7 +21,7 @@ A complete CMS portal built with Next.js, TypeScript, shadcn/ui, and Prisma. Sim
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS
 - **UI Components**: shadcn/ui
-- **Database**: SQLite (via Prisma)
+- **Database**: PostgreSQL via `pg`
 - **Authentication**: NextAuth.js
 - **Form Handling**: React Hook Form + Zod
 
@@ -39,11 +39,7 @@ A complete CMS portal built with Next.js, TypeScript, shadcn/ui, and Prisma. Sim
 npm install
 ```
 
-2. Set up the database:
-```bash
-npm run db:generate
-npm run db:push
-```
+2. Set `DATABASE_URL` to your PostgreSQL connection string.
 
 3. Create an admin user:
 ```bash
@@ -135,12 +131,10 @@ CMS/
 │   └── blogs/          # Blog-related components
 ├── lib/
 │   ├── auth.ts         # NextAuth configuration
-│   ├── prisma.ts       # Prisma client
+│   ├── db.ts           # PostgreSQL connection pool
 │   ├── cors.ts         # CORS utilities
 │   ├── api-auth.ts     # API authentication
 │   └── utils.ts        # Utility functions
-├── prisma/
-│   └── schema.prisma   # Database schema
 └── types/              # TypeScript type definitions
 ```
 
@@ -150,9 +144,6 @@ CMS/
 - `npm run build` - Build for production
 - `npm run start` - Start production server
 - `npm run lint` - Run ESLint
-- `npm run db:generate` - Generate Prisma client
-- `npm run db:push` - Push schema to database
-- `npm run db:studio` - Open Prisma Studio
 - `npm run db:seed` - Seed admin user
 
 ## Environment Variables
@@ -160,7 +151,7 @@ CMS/
 Create a `.env` file in the root directory:
 
 ```env
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://user:password@localhost:5432/cms"
 NEXTAUTH_SECRET="your-secret-key-here"
 NEXTAUTH_URL="http://localhost:3000"
 ALLOWED_ORIGINS="http://localhost:3000,https://yourdomain.com"

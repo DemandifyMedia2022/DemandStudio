@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { BlogForm } from "@/components/blogs/blog-form"
 
-import { prisma } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 
 export default async function NewBlogPage(props: {
   params: Promise<{ orgSlug: string; projectSlug: string }>
@@ -15,14 +15,14 @@ export default async function NewBlogPage(props: {
 
   const { orgSlug, projectSlug } = await props.params;
 
-  const project = await prisma.project.findUnique({
-    where: {
-      slug: projectSlug,
-      organization: {
-        slug: orgSlug
-      }
-    }
-  });
+  const projectResult = await pool.query(
+    `SELECT p.* FROM "Project" p
+     INNER JOIN "Organization" o ON o."id" = p."organizationId"
+     WHERE p."slug" = $1 AND o."slug" = $2
+     LIMIT 1`,
+    [projectSlug, orgSlug]
+  )
+  const project = projectResult.rows[0];
 
   if (!project) {
     return <div>Project not found</div>

@@ -17,7 +17,7 @@ export default async function MembersPage({ params }: { params: Promise<{ orgSlu
     }
 
     const members = await getOrganizationMembers(orgSlug)
-    const currentUserRole = members.find((member) => member.user.id === session.user.id)?.role
+    const currentUserRole = members.find((member: any) => member.user.id === session.user.id)?.role
     const canManageMembers = currentUserRole === "OWNER" || currentUserRole === "ADMIN"
 
     return (
@@ -48,3 +48,4 @@ export default async function MembersPage({ params }: { params: Promise<{ orgSlu
         </div>
     )
 }
+

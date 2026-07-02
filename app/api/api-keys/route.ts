@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { ApiKey } from "@prisma/client"
+import { pool } from "@/lib/db"
 import crypto from "crypto"
 
 export async function GET(request: NextRequest) {
@@ -20,27 +19,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Project context required" }, { status: 400 })
     }
 
-    const project = await prisma.project.findUnique({
-      where: {
-        slug: projectSlug,
-        organization: { slug: orgSlug }
-      }
-    })
+    const projectResult = await pool.query(
+      `SELECT p.*
+       FROM "Project" p
+       INNER JOIN "Organization" o ON o."id" = p."organizationId"
+       WHERE p."slug" = $1 AND o."slug" = $2
+       LIMIT 1`,
+      [projectSlug, orgSlug]
+    )
+    const project = projectResult.rows[0]
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
     }
 
-    const apiKeys = await prisma.apiKey.findMany({
-      where: {
-        userId: session.user.id,
-        projectId: project.id
-      },
-      orderBy: { createdAt: "desc" },
-    })
+    const { rows: apiKeys } = await pool.query(
+      `SELECT * FROM "ApiKey"
+       WHERE "userId" = $1 AND "projectId" = $2
+       ORDER BY "createdAt" DESC`,
+      [session.user.id, project.id]
+    )
 
     // Don't return the full key, just a masked version
-    const maskedKeys = apiKeys.map((key: ApiKey) => ({
+    const maskedKeys = apiKeys.map((key) => ({
       id: key.id,
       name: key.name,
       key: `${key.key.substring(0, 8)}...${key.key.substring(key.key.length - 4)}`,
@@ -78,12 +79,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const project = await prisma.project.findUnique({
-      where: {
-        slug: projectSlug,
-        organization: { slug: orgSlug }
-      }
-    })
+    const projectResult = await pool.query(
+      `SELECT p.*
+       FROM "Project" p
+       INNER JOIN "Organization" o ON o."id" = p."organizationId"
+       WHERE p."slug" = $1 AND o."slug" = $2
+       LIMIT 1`,
+      [projectSlug, orgSlug]
+    )
+    const project = projectResult.rows[0]
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
@@ -96,17 +100,15 @@ export async function POST(request: NextRequest) {
     const expiresAt = expiresInDays
       ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
       : null
+    const now = new Date()
 
-    const keyRecord = await prisma.apiKey.create({
-      data: {
-        name,
-        key: apiKey,
-        userId: session.user.id,
-        projectId: project.id,
-        expiresAt,
-        active: true,
-      },
-    })
+    const { rows } = await pool.query(
+      `INSERT INTO "ApiKey" ("id", "name", "key", "userId", "projectId", "expiresAt", "active", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+       RETURNING *`,
+      [crypto.randomUUID(), name, apiKey, session.user.id, project.id, expiresAt, true, now]
+    )
+    const keyRecord = rows[0]
 
     // Return the full key only on creation
     return NextResponse.json(
@@ -130,4 +132,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

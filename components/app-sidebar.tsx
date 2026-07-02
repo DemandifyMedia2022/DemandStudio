@@ -14,6 +14,7 @@ import {
   LogOut,
   Globe,
   ArrowLeft,
+  ImageIcon,
 } from "lucide-react"
 import { usePathname } from "next/navigation"
 
@@ -59,6 +60,7 @@ export function AppSidebar({
 }: React.ComponentProps<typeof Sidebar> & { user: User, role?: "admin" | "user" | "org", org?: Org }) {
   const pathname = usePathname()
   const [orgs, setOrgs] = React.useState<Org[]>([])
+  const [pendingCount, setPendingCount] = React.useState(0)
 
 
   // Fetch data only for regular users and org view context
@@ -72,8 +74,18 @@ export function AppSidebar({
           if (Array.isArray(data)) setOrgs(data)
         })
         .catch(console.error)
+    }
 
-
+    if (role === "admin") {
+      // Fetch pending comments count for admin
+      fetch("/api/comments?status=pending&limit=1")
+        .then(res => res.json())
+        .then(data => {
+          if (data && typeof data.total === "number") {
+            setPendingCount(data.total)
+          }
+        })
+        .catch(console.error)
     }
   }, [role])
 
@@ -108,6 +120,12 @@ export function AppSidebar({
                 title: "Users",
                 url: "/dashboard/admin/users",
                 isActive: pathname.startsWith("/dashboard/admin/users"),
+              },
+              {
+                title: "Comments",
+                url: "/dashboard/admin/comments",
+                isActive: pathname.startsWith("/dashboard/admin/comments"),
+                badge: pendingCount,
               },
               {
                 title: "Settings",
@@ -149,6 +167,11 @@ export function AppSidebar({
                 title: "Members",
                 url: `/dashboard/${org.slug}/members`,
                 isActive: pathname.startsWith(`/dashboard/${org.slug}/members`),
+              },
+              {
+                title: "Media Library",
+                url: `/dashboard/${org.slug}/media`,
+                isActive: pathname.startsWith(`/dashboard/${org.slug}/media`),
               },
               {
                 title: "Settings",
@@ -197,6 +220,26 @@ export function AppSidebar({
               title: "Blogs",
               url: "/dashboard/blogs",
               isActive: pathname.startsWith("/dashboard/blogs"),
+            },
+            {
+              title: "Comments",
+              url: "/dashboard/comments",
+              isActive: pathname.startsWith("/dashboard/comments"),
+            },
+            {
+              title: "Events",
+              url: "/dashboard/events",
+              isActive: pathname.startsWith("/dashboard/events"),
+            },
+            {
+              title: "Media Library",
+              url: "/dashboard/media",
+              isActive: pathname.startsWith("/dashboard/media"),
+            },
+            {
+              title: "Advertisements",
+              url: "/dashboard/advertisements",
+              isActive: pathname.startsWith("/dashboard/advertisements"),
             },
           ],
         },

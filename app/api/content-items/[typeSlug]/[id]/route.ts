@@ -1,7 +1,6 @@
-
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 
 export async function GET(
     request: NextRequest,
@@ -14,12 +13,15 @@ export async function GET(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        const item = await prisma.contentItem.findUnique({
-            where: { id: params.id },
-            include: {
-                contentType: true
-            }
-        })
+        const { rows } = await pool.query(
+            `SELECT ci.*, row_to_json(ct.*) AS "contentType"
+             FROM "ContentItem" ci
+             INNER JOIN "ContentType" ct ON ct."id" = ci."contentTypeId"
+             WHERE ci."id" = $1
+             LIMIT 1`,
+            [params.id]
+        )
+        const item = rows[0]
 
         if (!item) {
             return NextResponse.json({ error: "Item not found" }, { status: 404 })
@@ -31,7 +33,7 @@ export async function GET(
 
         return NextResponse.json({
             ...item,
-            data: JSON.parse(item.data),
+            data: typeof item.data === 'string' ? JSON.parse(item.data) : item.data,
         })
     } catch (error) {
         console.error("Error fetching content item:", error)
@@ -53,17 +55,18 @@ export async function PUT(
         const body = await request.json()
         const { data, published } = body
 
-        const item = await prisma.contentItem.update({
-            where: { id: params.id },
-            data: {
-                data: JSON.stringify(data),
-                published: published,
-            },
-        })
+        const { rows } = await pool.query(
+            `UPDATE "ContentItem"
+             SET "data" = $1, "published" = $2, "updatedAt" = $3
+             WHERE "id" = $4
+             RETURNING *`,
+            [JSON.stringify(data), published, new Date(), params.id]
+        )
+        const item = rows[0]
 
         return NextResponse.json({
             ...item,
-            data: JSON.parse(item.data),
+            data: typeof item.data === 'string' ? JSON.parse(item.data) : item.data,
         })
     } catch (error) {
         console.error("Error updating content item:", error)
@@ -82,9 +85,7 @@ export async function DELETE(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
 
-        await prisma.contentItem.delete({
-            where: { id: params.id },
-        })
+        await pool.query(`DELETE FROM "ContentItem" WHERE "id" = $1`, [params.id])
 
         return NextResponse.json({ success: true })
     } catch (error) {

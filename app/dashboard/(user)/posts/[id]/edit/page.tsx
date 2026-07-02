@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { PostForm } from "@/components/posts/post-form"
 
 export default async function EditPostPage({
@@ -15,9 +15,8 @@ export default async function EditPostPage({
     redirect("/login")
   }
 
-  const post = await prisma.post.findUnique({
-    where: { id },
-  })
+  const { rows } = await pool.query(`SELECT * FROM "Post" WHERE "id" = $1 LIMIT 1`, [id])
+  const post = rows[0]
 
   if (!post) {
     redirect("/dashboard/posts")

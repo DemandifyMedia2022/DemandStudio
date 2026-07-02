@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
-import { prisma } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
@@ -23,15 +23,23 @@ export default async function ContentItemsPage(props: {
     const { orgSlug, projectSlug, typeSlug } = params
 
     // Fetch Content Type
-    const contentType = await prisma.contentType.findUnique({
-        where: { slug: typeSlug },
-        include: {
-            project: true,
-            fields: {
-                orderBy: { order: 'asc' }
-            }
-        }
-    })
+    const contentTypeResult = await pool.query(
+        `SELECT ct.*, row_to_json(p.*) AS project
+         FROM "ContentType" ct
+         LEFT JOIN "Project" p ON p."id" = ct."projectId"
+         WHERE ct."slug" = $1
+         LIMIT 1`,
+        [typeSlug]
+    )
+    const contentType = contentTypeResult.rows[0]
+
+    if (contentType) {
+        const fieldsResult = await pool.query(
+            `SELECT * FROM "ContentField" WHERE "contentTypeId" = $1 ORDER BY "order" ASC`,
+            [contentType.id]
+        )
+        contentType.fields = fieldsResult.rows
+    }
 
     if (!contentType) {
         return notFound()
@@ -44,20 +52,21 @@ export default async function ContentItemsPage(props: {
     }
 
     // Fetch Items
-    const items = await prisma.contentItem.findMany({
-        where: { contentTypeId: contentType.id },
-        orderBy: { createdAt: 'desc' }
-    })
+    const itemsResult = await pool.query(
+        `SELECT * FROM "ContentItem" WHERE "contentTypeId" = $1 ORDER BY "createdAt" DESC`,
+        [contentType.id]
+    )
+    const items = itemsResult.rows
 
     const baseUrl = `/dashboard/${orgSlug}/projects/${projectSlug}/content/${typeSlug}`
 
     // Helper to extract a display title from the item data
     const getItemTitle = (item: any) => {
         try {
-            const data = JSON.parse(item.data)
+            const data = typeof item.data === 'string' ? JSON.parse(item.data) : item.data
             // Try to find common title-like fields or use the first text field
-            const titleField = contentType.fields.find(f => f.key === 'title' || f.key === 'name' || f.key === 'headline')
-                || contentType.fields.find(f => f.type === 'text')
+            const titleField = contentType.fields.find((f: any) => f.key === 'title' || f.key === 'name' || f.key === 'headline')
+                || contentType.fields.find((f: any) => f.type === 'text')
 
             if (titleField && data[titleField.key]) {
                 return data[titleField.key]
@@ -116,7 +125,7 @@ export default async function ContentItemsPage(props: {
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                items.map((item) => (
+                                items.map((item: any) => (
                                     <TableRow key={item.id}>
                                         <TableCell className="font-medium">
                                             {getItemTitle(item)}
@@ -139,7 +148,7 @@ export default async function ContentItemsPage(props: {
                                                         <Pencil className="h-4 w-4" />
                                                     </Button>
                                                 </Link>
-                                                <DeleteContentItemButton itemId={item.id} />
+                                                <DeleteContentItemButton itemId={item.id} typeSlug={typeSlug} />
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -152,3 +161,4 @@ export default async function ContentItemsPage(props: {
         </div>
     )
 }
+

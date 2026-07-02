@@ -26,9 +26,12 @@ export function NavMain({
     url: string
     icon?: LucideIcon
     isActive?: boolean
+    badge?: number
     items?: {
       title: string
       url: string
+      isActive?: boolean
+      badge?: number
     }[]
   }[]
 }) {
@@ -40,6 +43,15 @@ export function NavMain({
           // Check if item has valid sub-items
           const hasSubItems = item.items && item.items.length > 0
 
+          const Badge = ({ count }: { count?: number }) => {
+            if (!count || count <= 0) return null
+            return (
+              <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-[#ef4444] text-[10px] font-medium text-white">
+                {count}
+              </span>
+            )
+          }
+
           if (!hasSubItems) {
             return (
               <SidebarMenuItem key={item.title}>
@@ -48,9 +60,10 @@ export function NavMain({
                   tooltip={item.title}
                   isActive={item.isActive}
                 >
-                  <a href={item.url}>
+                  <a href={item.url} className="flex items-center w-full">
                     {item.icon && <item.icon />}
                     <span>{item.title}</span>
+                    <Badge count={item.badge} />
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -69,6 +82,7 @@ export function NavMain({
                   <SidebarMenuButton tooltip={item.title}>
                     {item.icon && <item.icon />}
                     <span>{item.title}</span>
+                    <Badge count={item.badge} />
                     <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                   </SidebarMenuButton>
                 </CollapsibleTrigger>
@@ -76,9 +90,10 @@ export function NavMain({
                   <SidebarMenuSub>
                     {item.items?.map((subItem) => (
                       <SidebarMenuSubItem key={subItem.title}>
-                        <SidebarMenuSubButton asChild>
-                          <a href={subItem.url}>
+                        <SidebarMenuSubButton asChild isActive={subItem.isActive}>
+                          <a href={subItem.url} className="flex items-center w-full">
                             <span>{subItem.title}</span>
+                            <Badge count={subItem.badge} />
                           </a>
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>

@@ -1,8 +1,8 @@
-
 import { auth } from "@/lib/auth"
-import { prisma as db } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { NextResponse } from "next/server"
 import * as z from "zod"
+import crypto from "crypto"
 
 const projectCreateSchema = z.object({
     name: z.string().min(2),
@@ -23,39 +23,34 @@ export async function POST(req: Request) {
         const body = projectCreateSchema.parse(json)
 
         // Check membership
-        const membership = await db.organizationMember.findUnique({
-            where: {
-                organizationId_userId: {
-                    organizationId: body.organizationId,
-                    userId: session.user.id,
-                },
-            },
-        })
+        const membershipResult = await pool.query(
+            `SELECT "id" FROM "OrganizationMember" WHERE "organizationId" = $1 AND "userId" = $2 LIMIT 1`,
+            [body.organizationId, session.user.id]
+        )
 
-        if (!membership) {
+        if (!membershipResult.rows[0]) {
             return new NextResponse("Forbidden", { status: 403 })
         }
 
         // Check project slug uniqueness (globally or per org? Schema says unique globally)
-        const existing = await db.project.findUnique({
-            where: { slug: body.slug }
-        })
+        const existingResult = await pool.query(
+            `SELECT "id" FROM "Project" WHERE "slug" = $1 LIMIT 1`,
+            [body.slug]
+        )
 
-        if (existing) {
+        if (existingResult.rows[0]) {
             return new NextResponse("Project with this slug already exists", { status: 409 })
         }
 
-        const project = await db.project.create({
-            data: {
-                name: body.name,
-                slug: body.slug,
-                description: body.description,
-                organizationId: body.organizationId,
-                updatedAt: new Date(),
-            }
-        })
+        const now = new Date()
+        const projectResult = await pool.query(
+            `INSERT INTO "Project" ("id", "name", "slug", "description", "organizationId", "createdAt", "updatedAt")
+             VALUES ($1, $2, $3, $4, $5, $6, $6)
+             RETURNING *`,
+            [crypto.randomUUID(), body.name, body.slug, body.description || null, body.organizationId, now]
+        )
 
-        return NextResponse.json(project)
+        return NextResponse.json(projectResult.rows[0])
     } catch (error) {
         if (error instanceof z.ZodError) {
             return new NextResponse(JSON.stringify(error.issues), { status: 422 })

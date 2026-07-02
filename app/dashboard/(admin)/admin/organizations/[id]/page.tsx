@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { prisma as db } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -27,23 +27,29 @@ export default async function AdminOrgDetailsPage(props: {
         redirect("/login")
     }
 
-    const org = await db.organization.findUnique({
-        where: { id: params.id },
-        include: {
-            members: {
-                include: {
-                    user: true
-                }
-            },
-            projects: true,
-            _count: {
-                select: {
-                    members: true,
-                    projects: true
-                }
-            }
+    const orgResult = await pool.query(`SELECT * FROM "Organization" WHERE "id" = $1 LIMIT 1`, [params.id])
+    const org = orgResult.rows[0]
+
+    if (org) {
+        const [membersResult, projectsResult, memberCountResult, projectCountResult] = await Promise.all([
+            pool.query(
+                `SELECT om.*, row_to_json(u.*) AS user
+                 FROM "OrganizationMember" om
+                 INNER JOIN "User" u ON u."id" = om."userId"
+                 WHERE om."organizationId" = $1`,
+                [org.id]
+            ),
+            pool.query(`SELECT * FROM "Project" WHERE "organizationId" = $1 ORDER BY "createdAt" DESC`, [org.id]),
+            pool.query(`SELECT COUNT(*)::int AS count FROM "OrganizationMember" WHERE "organizationId" = $1`, [org.id]),
+            pool.query(`SELECT COUNT(*)::int AS count FROM "Project" WHERE "organizationId" = $1`, [org.id]),
+        ])
+        org.members = membersResult.rows
+        org.projects = projectsResult.rows
+        org._count = {
+            members: memberCountResult.rows[0]?.count ?? 0,
+            projects: projectCountResult.rows[0]?.count ?? 0,
         }
-    })
+    }
 
     if (!org) {
         return (
@@ -56,9 +62,8 @@ export default async function AdminOrgDetailsPage(props: {
         )
     }
 
-    // Transform members to match OrgMembersManager interface strictly if needed, 
-    // though Prisma return type usually matches.
-    const sanitizedMembers = org.members.map(m => ({
+    // Transform members to match OrgMembersManager interface strictly if needed.
+    const sanitizedMembers = org.members.map((m: any) => ({
         id: m.id,
         role: m.role,
         user: {
@@ -136,3 +141,4 @@ export default async function AdminOrgDetailsPage(props: {
         </div>
     )
 }
+

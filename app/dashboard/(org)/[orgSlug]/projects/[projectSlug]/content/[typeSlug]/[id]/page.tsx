@@ -49,7 +49,7 @@ export default function EditContentItemPage() {
             }
 
             setContentType(type)
-            setInitialData(JSON.parse(item.data))
+            setInitialData(typeof item.data === 'string' ? JSON.parse(item.data) : item.data)
             setPublished(item.published)
         } catch (error) {
             console.error(error)

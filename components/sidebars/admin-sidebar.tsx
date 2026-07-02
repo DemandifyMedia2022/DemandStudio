@@ -29,6 +29,23 @@ export function AdminSidebar({
     ...props
 }: React.ComponentProps<typeof Sidebar> & { user: User }) {
     const pathname = usePathname()
+    const [pendingCount, setPendingCount] = React.useState(0)
+
+    React.useEffect(() => {
+        const fetchPendingCount = async () => {
+            try {
+                const res = await fetch("/api/comments?status=pending&limit=1")
+                const data = await res.json()
+                if (data && typeof data.total === "number") {
+                    setPendingCount(data.total)
+                }
+            } catch (error) {
+                console.error("Error fetching pending comments count:", error)
+            }
+        }
+
+        fetchPendingCount()
+    }, [])
 
     const data = React.useMemo(() => {
         return {
@@ -60,6 +77,12 @@ export function AdminSidebar({
                             isActive: pathname.startsWith("/dashboard/admin/users"),
                         },
                         {
+                            title: "Comments",
+                            url: "/dashboard/admin/comments",
+                            isActive: pathname.startsWith("/dashboard/admin/comments"),
+                            badge: pendingCount,
+                        },
+                        {
                             title: "Settings",
                             url: "/dashboard/admin/settings",
                             isActive: pathname.startsWith("/dashboard/admin/settings"),
@@ -68,7 +91,7 @@ export function AdminSidebar({
                 },
             ],
         }
-    }, [user, pathname])
+    }, [user, pathname, pendingCount])
 
     return (
         <Sidebar collapsible="icon" {...props}>

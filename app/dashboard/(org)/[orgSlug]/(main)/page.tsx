@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { prisma as db } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { auth } from "@/lib/auth"
 import { Greeting } from "@/components/dashboard/dashboard-widgets"
 import { OrgBentoNav } from "@/components/dashboard/org-bento-nav"
@@ -17,24 +17,17 @@ export default async function OrgDashboardPage(props: {
         return null
     }
 
-    const org = await db.organization.findUnique({
-        where: {
-            slug: params.orgSlug,
-        },
-        include: {
-            members: {
-                where: {
-                    userId: session.user.id,
-                },
-            },
-            projects: {
-                orderBy: {
-                    createdAt: "desc",
-                },
-                take: 5
-            },
-        },
-    })
+    const orgResult = await pool.query(`SELECT * FROM "Organization" WHERE "slug" = $1 LIMIT 1`, [params.orgSlug])
+    const org = orgResult.rows[0]
+
+    if (org) {
+        const [membersResult, projectsResult] = await Promise.all([
+            pool.query(`SELECT * FROM "OrganizationMember" WHERE "organizationId" = $1 AND "userId" = $2`, [org.id, session.user.id]),
+            pool.query(`SELECT * FROM "Project" WHERE "organizationId" = $1 ORDER BY "createdAt" DESC LIMIT 5`, [org.id]),
+        ])
+        org.members = membersResult.rows
+        org.projects = projectsResult.rows
+    }
 
     if (!org) {
         notFound()

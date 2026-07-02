@@ -24,7 +24,7 @@ export default function LoginPage() {
 
     try {
       const result = await signIn("credentials", {
-        email,
+        email: email.trim(),
         password,
         redirect: false,
       })
@@ -66,7 +66,7 @@ export default function LoginPage() {
                   <Label htmlFor="email">Email or User ID</Label>
                   <Input
                     id="email"
-                    type="email"
+                    type="text"
                     placeholder="m@example.com or DM-AB-0001"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}

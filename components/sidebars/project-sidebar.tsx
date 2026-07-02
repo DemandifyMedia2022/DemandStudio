@@ -7,6 +7,7 @@ import {
     Key,
     Database,
     GalleryVerticalEnd,
+    ImageIcon,
 } from "lucide-react"
 import { usePathname } from "next/navigation"
 
@@ -48,21 +49,30 @@ export function ProjectSidebar({
 }: React.ComponentProps<typeof Sidebar> & { user: User, project: Project, orgSlug: string }) {
     const pathname = usePathname()
     const [contentTypes, setContentTypes] = React.useState<ContentType[]>([])
+    const [pendingCount, setPendingCount] = React.useState(0)
 
-    // Fetch content types for this project? 
-    // Wait, content types are global or per project? 
-    // In UserSidebar they were fetched globally from /api/content-types.
-    // Assuming they are global for now or we will need to scope them to project later.
-    // For now, let's just fetch them as before.
+    // Fetch content types and pending comments count for this project
     React.useEffect(() => {
         if (!project?.slug || !orgSlug) return
+
+        // Fetch content types
         fetch(`/api/content-types?projectSlug=${project.slug}&orgSlug=${orgSlug}`)
             .then(res => res.json())
             .then(data => {
                 if (Array.isArray(data)) setContentTypes(data)
             })
             .catch(console.error)
-    }, [])
+
+        // Fetch pending comments count
+        fetch(`/api/comments?status=pending&projectSlug=${project.slug}&orgSlug=${orgSlug}&limit=1`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && typeof data.total === "number") {
+                    setPendingCount(data.total)
+                }
+            })
+            .catch(console.error)
+    }, [project?.slug, orgSlug])
 
     const data = React.useMemo(() => {
         const baseUrl = `/dashboard/${orgSlug}/projects/${project.slug}`
@@ -97,11 +107,22 @@ export function ProjectSidebar({
                             url: `${baseUrl}/blogs`,
                             isActive: pathname.startsWith(`${baseUrl}/blogs`),
                         },
+                        {
+                            title: "Comments",
+                            url: `${baseUrl}/comments`,
+                            isActive: pathname.startsWith(`${baseUrl}/comments`),
+                            badge: pendingCount,
+                        },
                         ...contentTypes.map(type => ({
                             title: type.name,
                             url: `${baseUrl}/content/${type.slug}`,
                             isActive: pathname.startsWith(`${baseUrl}/content/${type.slug}`),
-                        }))
+                        })),
+                        {
+                            title: "Media Library",
+                            url: `${baseUrl}/media`,
+                            isActive: pathname.startsWith(`${baseUrl}/media`),
+                        }
                     ],
                 },
                 {
@@ -141,7 +162,7 @@ export function ProjectSidebar({
                 }
             ],
         }
-    }, [user, pathname, contentTypes, project.slug, orgSlug])
+    }, [user, pathname, contentTypes, project.slug, orgSlug, pendingCount])
 
     return (
         <Sidebar collapsible="icon" {...props}>

@@ -4,7 +4,7 @@ import { ProjectSidebar } from "@/components/sidebars/project-sidebar"
 import { ModeToggle } from "@/components/mode-toggle"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { prisma as db } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 
 export default async function ProjectLayout(props: {
     children: React.ReactNode
@@ -19,17 +19,17 @@ export default async function ProjectLayout(props: {
     }
 
     // Verify membership for this specific org and project existence
-    const org = await db.organization.findUnique({
-        where: { slug: params.orgSlug },
-        include: {
-            members: {
-                where: { userId: session.user.id }
-            },
-            projects: {
-                where: { slug: params.projectSlug }
-            }
-        }
-    })
+    const orgResult = await pool.query(`SELECT * FROM "Organization" WHERE "slug" = $1 LIMIT 1`, [params.orgSlug])
+    const org = orgResult.rows[0]
+
+    if (org) {
+        const [membersResult, projectsResult] = await Promise.all([
+            pool.query(`SELECT * FROM "OrganizationMember" WHERE "organizationId" = $1 AND "userId" = $2`, [org.id, session.user.id]),
+            pool.query(`SELECT * FROM "Project" WHERE "organizationId" = $1 AND "slug" = $2`, [org.id, params.projectSlug]),
+        ])
+        org.members = membersResult.rows
+        org.projects = projectsResult.rows
+    }
 
     if (!org || org.members.length === 0) {
         redirect("/dashboard")

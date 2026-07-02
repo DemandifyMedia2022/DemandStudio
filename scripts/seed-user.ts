@@ -1,30 +1,30 @@
-import { PrismaClient } from '@prisma/client'
+import { pool } from '../lib/db'
 import bcrypt from 'bcryptjs'
-
-const prisma = new PrismaClient()
+import crypto from 'crypto'
 
 async function main() {
   // Check if admin user already exists
-  const existingUser = await prisma.user.findUnique({
-    where: { email: "admin@example.com" },
-  })
+  const existingResult = await pool.query(
+    `SELECT "id" FROM "User" WHERE "email" = $1 LIMIT 1`,
+    ["admin@example.com"]
+  )
 
-  if (existingUser) {
+  if (existingResult.rows[0]) {
     console.log("Admin user already exists!")
     return
   }
 
   // Create admin user
   const hashedPassword = await bcrypt.hash("admin123", 10)
+  const now = new Date()
 
-  const user = await prisma.user.create({
-    data: {
-      email: "admin@example.com",
-      name: "Admin User",
-      password: hashedPassword,
-      role: "admin",
-    },
-  })
+  const { rows } = await pool.query(
+    `INSERT INTO "User" ("id", "email", "name", "password", "role", "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, $5, $6, $6)
+     RETURNING *`,
+    [crypto.randomUUID(), "admin@example.com", "Admin User", hashedPassword, "admin", now]
+  )
+  const user = rows[0]
 
   console.log("Admin user created successfully!")
   console.log("Email:", user.email)
@@ -37,6 +37,5 @@ main()
     process.exit(1)
   })
   .finally(async () => {
-    await prisma.$disconnect()
+    await pool.end()
   })
-

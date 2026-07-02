@@ -1,6 +1,6 @@
 
 import Link from "next/link"
-import { prisma } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -23,29 +23,29 @@ export default async function ProjectPostsPage(props: {
     const params = await props.params;
 
     // Fetch project to get ID
-    const project = await prisma.project.findUnique({
-        where: { slug: params.projectSlug },
-        select: { id: true, name: true }
-    })
+    const projectResult = await pool.query(
+        `SELECT p."id", p."name"
+         FROM "Project" p
+         INNER JOIN "Organization" o ON o."id" = p."organizationId"
+         WHERE p."slug" = $1 AND o."slug" = $2
+         LIMIT 1`,
+        [params.projectSlug, params.orgSlug]
+    )
+    const project = projectResult.rows[0]
 
     if (!project) {
         notFound();
     }
 
-    const posts = await prisma.post.findMany({
-        where: { projectId: project.id },
-        include: {
-            author: {
-                select: {
-                    name: true,
-                    email: true,
-                },
-            },
-        },
-        orderBy: {
-            createdAt: "desc",
-        },
-    })
+    const { rows: posts } = await pool.query(
+        `SELECT p.*,
+          CASE WHEN u."id" IS NULL THEN NULL ELSE json_build_object('name', u."name", 'email', u."email") END AS author
+         FROM "Post" p
+         LEFT JOIN "User" u ON u."id" = p."authorId"
+         WHERE p."projectId" = $1
+         ORDER BY p."createdAt" DESC`,
+        [project.id]
+    )
 
     const baseUrl = `/dashboard/${params.orgSlug}/projects/${params.projectSlug}`
 

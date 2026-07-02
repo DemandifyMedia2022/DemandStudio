@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { BlogForm } from "@/components/blogs/blog-form"
 
 export default async function EditBlogPage(props: {
@@ -13,9 +13,8 @@ export default async function EditBlogPage(props: {
     redirect("/login")
   }
 
-  const blog = await prisma.blog.findUnique({
-    where: { id },
-  })
+  const { rows } = await pool.query(`SELECT * FROM "Blog" WHERE "id" = $1 LIMIT 1`, [id])
+  const blog = rows[0]
 
   if (!blog) {
     // Redirect to the correct list page if not found

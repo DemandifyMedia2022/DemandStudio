@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { prisma as db } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { ProjectDetails } from "@/components/dashboard/project-details"
 import { ProjectGetStarted } from "@/components/dashboard/project-get-started"
 
@@ -8,17 +8,15 @@ export default async function ProjectDashboardPage(props: {
 }) {
     const params = await props.params;
 
-    const project = await db.project.findUnique({
-        where: {
-            slug: params.projectSlug,
-            organization: {
-                slug: params.orgSlug
-            }
-        },
-        include: {
-            organization: true
-        }
-    })
+    const { rows } = await pool.query(
+        `SELECT p.*, row_to_json(o.*) AS organization
+         FROM "Project" p
+         INNER JOIN "Organization" o ON o."id" = p."organizationId"
+         WHERE p."slug" = $1 AND o."slug" = $2
+         LIMIT 1`,
+        [params.projectSlug, params.orgSlug]
+    )
+    const project = rows[0]
 
     if (!project) {
         notFound()

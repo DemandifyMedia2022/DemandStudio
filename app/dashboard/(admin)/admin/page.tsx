@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth"
-import { prisma as db } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, Building, Activity } from "lucide-react"
 import { redirect } from "next/navigation"
@@ -11,10 +11,12 @@ export default async function AdminDashboardPage() {
         redirect("/login")
     }
 
-    const [userCount, orgCount] = await Promise.all([
-        db.user.count(),
-        db.organization.count()
+        const [userCountResult, orgCountResult] = await Promise.all([
+        pool.query(`SELECT COUNT(*)::int AS count FROM "User"`),
+        pool.query(`SELECT COUNT(*)::int AS count FROM "Organization"`)
     ])
+    const userCount = userCountResult.rows[0]?.count ?? 0
+    const orgCount = orgCountResult.rows[0]?.count ?? 0
 
     return (
         <div className="flex-1 space-y-4 p-8 pt-6">

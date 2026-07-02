@@ -1,181 +1,155 @@
-import { prisma } from '@/lib/prisma';
+import { pool } from '@/lib/db';
 import { CMS_FIELDS } from './constants';
 import { CmsQueryOptions, CmsDocument } from './types';
 
+function mapVirtualDocument(row: any, type: 'post' | 'blog'): CmsDocument {
+    return {
+        ...row,
+        [CMS_FIELDS.ID]: row.id,
+        [CMS_FIELDS.TYPE]: type,
+        [CMS_FIELDS.CREATED_AT]: row.createdAt.toISOString(),
+        [CMS_FIELDS.UPDATED_AT]: row.updatedAt.toISOString(),
+        [CMS_FIELDS.REV]: row.updatedAt.getTime().toString(),
+        [CMS_FIELDS.PROJECT_ID]: row.projectId || undefined,
+    };
+}
+
+function mapContentItem(row: any): CmsDocument {
+    let data: any = {};
+    try {
+        data = JSON.parse(row.data);
+    } catch (e) {
+        data = {};
+    }
+
+    return {
+        ...data,
+        [CMS_FIELDS.ID]: row.id,
+        [CMS_FIELDS.TYPE]: row.contentType.slug,
+        [CMS_FIELDS.CREATED_AT]: row.createdAt.toISOString(),
+        [CMS_FIELDS.UPDATED_AT]: row.updatedAt.toISOString(),
+        [CMS_FIELDS.REV]: row.updatedAt.getTime().toString(),
+        [CMS_FIELDS.PROJECT_ID]: row.contentType.projectId || undefined,
+    };
+}
+
 export class CmsQueryEngine {
     /**
-     * unified query method to get "Documents" (ContentItems) 
+     * unified query method to get "Documents" (ContentItems)
      * formatted as Sanity-like JSON objects.
      */
     static async query(options: CmsQueryOptions): Promise<CmsDocument[]> {
         const { type, limit = 10, offset = 0, projectId, filter } = options;
 
-        // 1. Resolve ContentType ID if 'type' (slug) is provided
-        let contentTypeId: string | undefined;
-
-        // 0. Handle Virtual Types (Post, Blog)
         if (type === 'post') {
-            const where: any = {};
-            if (projectId) where.projectId = projectId;
-            if (filter?.published !== undefined) where.published = filter.published;
-
-            const posts = await prisma.post.findMany({
-                where,
-                take: limit,
-                skip: offset,
-                orderBy: { createdAt: 'desc' }
-            });
-
-            return posts.map(post => ({
-                ...post,
-                [CMS_FIELDS.ID]: post.id,
-                [CMS_FIELDS.TYPE]: 'post',
-                [CMS_FIELDS.CREATED_AT]: post.createdAt.toISOString(),
-                [CMS_FIELDS.UPDATED_AT]: post.updatedAt.toISOString(),
-                [CMS_FIELDS.REV]: post.updatedAt.getTime().toString(),
-                [CMS_FIELDS.PROJECT_ID]: post.projectId || undefined,
-            }));
+            const params: any[] = [];
+            const clauses: string[] = [];
+            if (projectId) {
+                params.push(projectId);
+                clauses.push(`p."projectId" = $${params.length}`);
+            }
+            if (filter?.published !== undefined) {
+                params.push(filter.published);
+                clauses.push(`p."published" = $${params.length}`);
+            }
+            const whereSql = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+            const { rows } = await pool.query(
+                `SELECT p.* FROM "Post" p ${whereSql} ORDER BY p."createdAt" DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+                [...params, limit, offset]
+            );
+            return rows.map(row => mapVirtualDocument(row, 'post'));
         }
 
         if (type === 'blog') {
-            const where: any = {};
-            if (projectId) where.projectId = projectId;
-            if (filter?.published !== undefined) where.published = filter.published;
-
-            const blogs = await prisma.blog.findMany({
-                where,
-                take: limit,
-                skip: offset,
-                orderBy: { createdAt: 'desc' }
-            });
-
-            return blogs.map(blog => ({
-                ...blog,
-                [CMS_FIELDS.ID]: blog.id,
-                [CMS_FIELDS.TYPE]: 'blog',
-                [CMS_FIELDS.CREATED_AT]: blog.createdAt.toISOString(),
-                [CMS_FIELDS.UPDATED_AT]: blog.updatedAt.toISOString(),
-                [CMS_FIELDS.REV]: blog.updatedAt.getTime().toString(),
-                [CMS_FIELDS.PROJECT_ID]: blog.projectId || undefined,
-            }));
+            const params: any[] = [];
+            const clauses: string[] = [];
+            if (projectId) {
+                params.push(projectId);
+                clauses.push(`b."projectId" = $${params.length}`);
+            }
+            if (filter?.published !== undefined) {
+                params.push(filter.published);
+                clauses.push(`b."published" = $${params.length}`);
+            }
+            const whereSql = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+            const { rows } = await pool.query(
+                `SELECT b.* FROM "Blog" b ${whereSql} ORDER BY b."createdAt" DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+                [...params, limit, offset]
+            );
+            return rows.map(row => mapVirtualDocument(row, 'blog'));
         }
 
+        let contentTypeId: string | undefined;
+
         if (type) {
-            const ct = await prisma.contentType.findFirst({
-                where: {
-                    slug: type,
-                    projectId: projectId || undefined
-                }
-            });
+            const params: any[] = [type];
+            let sql = `SELECT * FROM "ContentType" WHERE "slug" = $1`;
+            if (projectId) {
+                params.push(projectId);
+                sql += ` AND "projectId" = $2`;
+            }
+            sql += ` LIMIT 1`;
+            const { rows } = await pool.query(sql, params);
+            const ct = rows[0];
             if (ct) {
                 contentTypeId = ct.id;
             } else {
-                // If type specified but not found, return empty
                 return [];
             }
         }
 
-        // 2. Build Prisma Query
-        const where: any = {};
+        const params: any[] = [];
+        const clauses: string[] = [];
 
         if (contentTypeId) {
-            where.contentTypeId = contentTypeId;
+            params.push(contentTypeId);
+            clauses.push(`ci."contentTypeId" = $${params.length}`);
         }
 
-        // Note: "Filter" implementation is limited because data is stored in 'data' LongText column (JSON string).
-        // We cannot efficiently query JSON properties in MySQL unless we use JSON_EXTRACT (Native SQL).
-        // For now, we fetch validation-compliant items and filter in memory or rely on basic metadata filters.
-
-        // Allow filtering by 'published'
         if (filter?.published !== undefined) {
-            where.published = filter.published;
+            params.push(filter.published);
+            clauses.push(`ci."published" = $${params.length}`);
         }
 
-        const items = await prisma.contentItem.findMany({
-            where,
-            take: limit,
-            skip: offset,
-            include: {
-                contentType: true
-            },
-            orderBy: {
-                createdAt: 'desc'
-            }
-        });
+        const whereSql = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+        const { rows } = await pool.query(
+            `SELECT ci.*, row_to_json(ct.*) AS "contentType"
+             FROM "ContentItem" ci
+             INNER JOIN "ContentType" ct ON ct."id" = ci."contentTypeId"
+             ${whereSql}
+             ORDER BY ci."createdAt" DESC
+             LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+            [...params, limit, offset]
+        );
 
-        // 3. Transform to CMS Document
-        return items.map((item) => {
-            let data: any = {};
-            try {
-                data = JSON.parse(item.data);
-            } catch (e) {
-                data = {};
-            }
-
-            return {
-                ...data,
-                [CMS_FIELDS.ID]: item.id,
-                [CMS_FIELDS.TYPE]: item.contentType.slug,
-                [CMS_FIELDS.CREATED_AT]: item.createdAt.toISOString(),
-                [CMS_FIELDS.UPDATED_AT]: item.updatedAt.toISOString(),
-                // For revision, we can use updatedAt timestamp or a hash if we implement one
-                [CMS_FIELDS.REV]: item.updatedAt.getTime().toString(),
-                [CMS_FIELDS.PROJECT_ID]: item.contentType.projectId || undefined,
-            };
-        });
+        return rows.map(mapContentItem);
     }
 
     static async getById(id: string): Promise<CmsDocument | null> {
-        const item = await prisma.contentItem.findUnique({
-            where: { id },
-            include: { contentType: true }
-        });
+        const itemResult = await pool.query(
+            `SELECT ci.*, row_to_json(ct.*) AS "contentType"
+             FROM "ContentItem" ci
+             INNER JOIN "ContentType" ct ON ct."id" = ci."contentTypeId"
+             WHERE ci."id" = $1
+             LIMIT 1`,
+            [id]
+        );
+        const item = itemResult.rows[0];
 
         if (item) {
-            let data: any = {};
-            try {
-                data = JSON.parse(item.data);
-            } catch (e) {
-                data = {};
-            }
-
-            return {
-                ...data,
-                [CMS_FIELDS.ID]: item.id,
-                [CMS_FIELDS.TYPE]: item.contentType.slug,
-                [CMS_FIELDS.CREATED_AT]: item.createdAt.toISOString(),
-                [CMS_FIELDS.UPDATED_AT]: item.updatedAt.toISOString(),
-                [CMS_FIELDS.REV]: item.updatedAt.getTime().toString(),
-                [CMS_FIELDS.PROJECT_ID]: item.contentType.projectId || undefined,
-            };
+            return mapContentItem(item);
         }
 
-        // Try Post
-        const post = await prisma.post.findUnique({ where: { id } });
+        const postResult = await pool.query(`SELECT * FROM "Post" WHERE "id" = $1 LIMIT 1`, [id]);
+        const post = postResult.rows[0];
         if (post) {
-            return {
-                ...post,
-                [CMS_FIELDS.ID]: post.id,
-                [CMS_FIELDS.TYPE]: 'post',
-                [CMS_FIELDS.CREATED_AT]: post.createdAt.toISOString(),
-                [CMS_FIELDS.UPDATED_AT]: post.updatedAt.toISOString(),
-                [CMS_FIELDS.REV]: post.updatedAt.getTime().toString(),
-                [CMS_FIELDS.PROJECT_ID]: post.projectId || undefined,
-            };
+            return mapVirtualDocument(post, 'post');
         }
 
-        // Try Blog
-        const blog = await prisma.blog.findUnique({ where: { id } });
+        const blogResult = await pool.query(`SELECT * FROM "Blog" WHERE "id" = $1 LIMIT 1`, [id]);
+        const blog = blogResult.rows[0];
         if (blog) {
-            return {
-                ...blog,
-                [CMS_FIELDS.ID]: blog.id,
-                [CMS_FIELDS.TYPE]: 'blog',
-                [CMS_FIELDS.CREATED_AT]: blog.createdAt.toISOString(),
-                [CMS_FIELDS.UPDATED_AT]: blog.updatedAt.toISOString(),
-                [CMS_FIELDS.REV]: blog.updatedAt.getTime().toString(),
-                [CMS_FIELDS.PROJECT_ID]: blog.projectId || undefined,
-            };
+            return mapVirtualDocument(blog, 'blog');
         }
 
         return null;

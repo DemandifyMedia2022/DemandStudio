@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import bcrypt from "bcryptjs"
+import crypto from "crypto"
 
 export async function POST() {
   try {
     // Check if admin user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: "admin@example.com" },
-    })
+    const existingResult = await pool.query(
+      `SELECT "id" FROM "User" WHERE "email" = $1 LIMIT 1`,
+      ["admin@example.com"]
+    )
 
-    if (existingUser) {
+    if (existingResult.rows[0]) {
       return NextResponse.json(
         { message: "Admin user already exists" },
         { status: 400 }
@@ -18,15 +20,15 @@ export async function POST() {
 
     // Create admin user
     const hashedPassword = await bcrypt.hash("admin123", 10)
+    const now = new Date()
 
-    const user = await prisma.user.create({
-      data: {
-        email: "admin@example.com",
-        name: "Admin User",
-        password: hashedPassword,
-        role: "admin",
-      },
-    })
+    const { rows } = await pool.query(
+      `INSERT INTO "User" ("id", "email", "name", "password", "role", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $6)
+       RETURNING *`,
+      [crypto.randomUUID(), "admin@example.com", "Admin User", hashedPassword, "admin", now]
+    )
+    const user = rows[0]
 
     return NextResponse.json(
       {
@@ -43,4 +45,3 @@ export async function POST() {
     )
   }
 }
-

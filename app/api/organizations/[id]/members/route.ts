@@ -1,8 +1,8 @@
-
 import { auth } from "@/lib/auth"
-import { prisma as db } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { NextResponse } from "next/server"
 import * as z from "zod"
+import crypto from "crypto"
 
 const memberAddSchema = z.object({
     email: z.string().email(),
@@ -14,6 +14,10 @@ const memberUpdateSchema = z.object({
     memberId: z.string(),
     role: z.string(),
 })
+
+function withUser(member: any, user: any) {
+    return { ...member, user }
+}
 
 export async function POST(
     req: Request,
@@ -31,9 +35,11 @@ export async function POST(
         const body = memberAddSchema.parse(json)
 
         // Find user
-        let user = await db.user.findUnique({
-            where: { email: body.email }
-        })
+        const userResult = await pool.query(
+            `SELECT * FROM "User" WHERE "email" = $1 LIMIT 1`,
+            [body.email]
+        )
+        let user = userResult.rows[0]
 
         // If user doesn't exist, create them
         if (!user) {
@@ -43,43 +49,36 @@ export async function POST(
 
             const bcrypt = await import("bcryptjs")
             const hashedPassword = await bcrypt.hash(body.password, 10)
+            const now = new Date()
 
-            user = await db.user.create({
-                data: {
-                    email: body.email,
-                    name: body.email.split("@")[0], // Default name from email part
-                    password: hashedPassword,
-                    role: "user", // Default system role
-                }
-            })
+            const createdUser = await pool.query(
+                `INSERT INTO "User" ("id", "email", "name", "password", "role", "createdAt", "updatedAt")
+                 VALUES ($1, $2, $3, $4, $5, $6, $6)
+                 RETURNING *`,
+                [crypto.randomUUID(), body.email, body.email.split("@")[0], hashedPassword, "user", now]
+            )
+            user = createdUser.rows[0]
         }
 
         // Check availability
-        const existing = await db.organizationMember.findUnique({
-            where: {
-                organizationId_userId: {
-                    organizationId: routeParams.id,
-                    userId: user.id
-                }
-            }
-        })
+        const existingResult = await pool.query(
+            `SELECT "id" FROM "OrganizationMember" WHERE "organizationId" = $1 AND "userId" = $2 LIMIT 1`,
+            [routeParams.id, user.id]
+        )
 
-        if (existing) {
+        if (existingResult.rows[0]) {
             return new NextResponse("User is already a member", { status: 409 })
         }
 
-        const member = await db.organizationMember.create({
-            data: {
-                organizationId: routeParams.id,
-                userId: user.id,
-                role: body.role
-            },
-            include: {
-                user: true
-            }
-        })
+        const now = new Date()
+        const memberResult = await pool.query(
+            `INSERT INTO "OrganizationMember" ("id", "organizationId", "userId", "role", "createdAt", "updatedAt")
+             VALUES ($1, $2, $3, $4, $5, $5)
+             RETURNING *`,
+            [crypto.randomUUID(), routeParams.id, user.id, body.role, now]
+        )
 
-        return NextResponse.json(member)
+        return NextResponse.json(withUser(memberResult.rows[0], user))
     } catch (error) {
         if (error instanceof z.ZodError) {
             return new NextResponse(JSON.stringify(error.issues), { status: 422 })
@@ -107,12 +106,10 @@ export async function DELETE(
             return new NextResponse("Member ID required", { status: 400 })
         }
 
-        await db.organizationMember.delete({
-            where: {
-                id: memberId,
-                organizationId: routeParams.id
-            }
-        })
+        await pool.query(
+            `DELETE FROM "OrganizationMember" WHERE "id" = $1 AND "organizationId" = $2`,
+            [memberId, routeParams.id]
+        )
 
         return new NextResponse(null, { status: 200 })
     } catch (error) {
@@ -134,18 +131,17 @@ export async function PATCH(
         const json = await req.json()
         const body = memberUpdateSchema.parse(json)
 
-        const member = await db.organizationMember.update({
-            where: {
-                id: body.memberId,
-                organizationId: routeParams.id
-            },
-            data: {
-                role: body.role
-            },
-            include: { user: true }
-        })
+        const memberResult = await pool.query(
+            `UPDATE "OrganizationMember"
+             SET "role" = $1, "updatedAt" = $2
+             WHERE "id" = $3 AND "organizationId" = $4
+             RETURNING *`,
+            [body.role, new Date(), body.memberId, routeParams.id]
+        )
+        const member = memberResult.rows[0]
+        const userResult = await pool.query(`SELECT * FROM "User" WHERE "id" = $1 LIMIT 1`, [member.userId])
 
-        return NextResponse.json(member)
+        return NextResponse.json(withUser(member, userResult.rows[0]))
     } catch (error) {
         return new NextResponse(null, { status: 500 })
     }

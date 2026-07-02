@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useForm, SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -13,7 +13,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Editor } from "@/components/blocks/editor-x/editor"
 import { ImageUploader } from "@/components/ui/image-uploader"
 import { FAQEditor } from "@/components/blogs/faq-editor"
-import { Eye, CalendarClock } from "lucide-react"
+import { Eye, CalendarClock, Loader2 } from "lucide-react"
+import { toast } from "sonner"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
+const CATEGORIES_MAP: Record<string, string[]> = {
+  "Trending Topic": ["Artificial Intelligence", "Cybersecurity", "Cloud", "Software", "Mobile", "Technology"],
+  "FinTeq": ["Banking Tech", "Wealth Tech", "SoftTech", "PayTech", "InsurTech", "FinTeq"],
+  "CXTeq": ["CX Automation", "Customer Journey", "Customer Data Platform"],
+  "HRTeq": ["HCM", "HRMS", "Learning & Development", "Payroll Management", "Recruitment & Staff Augmentation"],
+  "MarTeq": []
+}
+
 
 const blogSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -24,7 +41,8 @@ const blogSchema = z.object({
   featured: z.boolean(),
   tags: z.string().optional(),
   image: z.string().optional(),
-  category: z.string().optional(),
+  category: z.string().min(1, "Category is required"),
+  subcategory: z.string().optional(),
   // New fields
   canonicalUrl: z.string().url("Must be a valid URL").optional().or(z.literal("")),
   seoTitle: z.string().optional(),
@@ -38,7 +56,16 @@ const blogSchema = z.object({
   enableToc: z.boolean().default(false),
   tocStructure: z.string().optional(), // JSON string for TOC
   displayedAuthorId: z.string().optional(),
+}).refine((data) => {
+  if (data.category && data.category !== "MarTeq" && !data.subcategory) {
+    return false
+  }
+  return true
+}, {
+  message: "Subcategory is required for selected category",
+  path: ["subcategory"],
 })
+
 
 type BlogFormData = z.infer<typeof blogSchema>
 
@@ -55,7 +82,9 @@ interface BlogFormProps {
     tags?: string | null
     image?: string | null
     category?: string | null
+    subcategory?: string | null
     canonicalUrl?: string | null
+
     seoTitle?: string | null
     seoDescription?: string | null
     metaKeywords?: string | null
@@ -138,7 +167,9 @@ export function BlogForm({ userId, blog, organizationId, projectId, redirectUrl 
         tags: blog.tags || "",
         image: blog.image || "",
         category: blog.category || "",
+        subcategory: blog.subcategory || "",
         canonicalUrl: blog.canonicalUrl || "",
+
         seoTitle: blog.seoTitle || "",
         seoDescription: blog.seoDescription || "",
         metaKeywords: blog.metaKeywords || "",
@@ -161,7 +192,9 @@ export function BlogForm({ userId, blog, organizationId, projectId, redirectUrl 
         tags: "",
         image: "",
         category: "",
+        subcategory: "",
         canonicalUrl: "",
+
         seoTitle: "",
         seoDescription: "",
         metaKeywords: "",
@@ -176,13 +209,33 @@ export function BlogForm({ userId, blog, organizationId, projectId, redirectUrl 
       },
   })
 
-  // Register content field manually since Editor doesn't use ref
+  // Register fields manually since they don't use standard register ref or are controlled components
   useEffect(() => {
     register("content")
+    register("image")
+    register("ogImage")
+    register("faqs")
+    register("category")
+    register("subcategory")
   }, [register])
 
   const title = watch("title")
+  const selectedCategory = watch("category")
+  const subcategories = selectedCategory ? CATEGORIES_MAP[selectedCategory] || [] : []
+
+  const isFirstRender = useRef(true)
   useEffect(() => {
+    // Skip reset on first render if we have a blog (editing mode)
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
+    // Reset subcategory when category changes
+    setValue("subcategory", "")
+  }, [selectedCategory, setValue])
+
+  useEffect(() => {
+
     if (!blog && title) {
       const slug = title
         .toLowerCase()
@@ -194,6 +247,7 @@ export function BlogForm({ userId, blog, organizationId, projectId, redirectUrl 
 
   const onSubmit: SubmitHandler<BlogFormData> = async (data) => {
     setLoading(true)
+    console.log("Submitting blog data:", data)
     try {
       const url = blog ? `/api/blogs/${blog.id}` : "/api/blogs"
       const method = blog ? "PUT" : "POST"
@@ -202,9 +256,9 @@ export function BlogForm({ userId, blog, organizationId, projectId, redirectUrl 
         method,
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-cache",
         },
         body: JSON.stringify({
-          ...data,
           ...data,
           authorId: userId,
           publishedAt: data.publishedAt ? new Date(data.publishedAt).toISOString() : (data.published ? new Date().toISOString() : null),
@@ -215,18 +269,26 @@ export function BlogForm({ userId, blog, organizationId, projectId, redirectUrl 
         }),
       })
 
+      const result = await response.json()
+      console.log("API Response:", result)
+
       if (response.ok) {
+        toast.success(blog ? "Blog updated successfully" : "Blog created successfully")
+        
+        // Ensure UI is fresh
+        router.refresh()
+        
         if (redirectUrl) {
           router.push(redirectUrl)
-        } else {
+        } else if (!blog) {
           router.push("/dashboard/blogs")
         }
-        router.refresh()
       } else {
-        alert("Failed to save blog")
+        toast.error(result.error || "Failed to save blog")
       }
     } catch (error) {
-      alert("An error occurred")
+      console.error("Submission error:", error)
+      toast.error("An error occurred while saving the blog")
     } finally {
       setLoading(false)
     }
@@ -291,14 +353,60 @@ export function BlogForm({ userId, blog, organizationId, projectId, redirectUrl 
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="category">Category</Label>
-            <Input
-              id="category"
-              {...register("category")}
-              placeholder="Blog category"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="category">Category</Label>
+              <Select
+                value={watch("category")}
+                onValueChange={(value) => {
+                  setValue("category", value)
+                  trigger("category")
+                }}
+              >
+                <SelectTrigger id="category">
+                  <SelectValue placeholder="Select Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.keys(CATEGORIES_MAP).map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.category && (
+                <p className="text-sm text-destructive">{errors.category.message}</p>
+              )}
+            </div>
+
+            {selectedCategory && selectedCategory !== "MarTeq" && (
+              <div className="space-y-2">
+                <Label htmlFor="subcategory">Subcategory</Label>
+                <Select
+                  value={watch("subcategory")}
+                  onValueChange={(value) => {
+                    setValue("subcategory", value)
+                    trigger("subcategory")
+                  }}
+                >
+                  <SelectTrigger id="subcategory">
+                    <SelectValue placeholder="Select Subcategory" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {subcategories.map((sub) => (
+                      <SelectItem key={sub} value={sub}>
+                        {sub}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedCategory !== "MarTeq" && !watch("subcategory") && (
+                  <p className="text-sm text-muted-foreground">Please select a subcategory</p>
+                )}
+              </div>
+            )}
           </div>
+
 
           <div className="space-y-2">
             <Label htmlFor="excerpt">Excerpt</Label>
@@ -434,14 +542,10 @@ export function BlogForm({ userId, blog, organizationId, projectId, redirectUrl 
           </Card>
 
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="published"
-                {...register("published")}
-                className="h-4 w-4"
-              />
-              <Label htmlFor="published">Published</Label>
+            <div className="text-sm font-medium px-3 py-1.5 rounded-md border bg-muted">
+              Status: <span className={watch("published") ? "text-green-600 font-bold" : "text-amber-600 font-bold"}>
+                {watch("published") ? "Published" : "Draft"}
+              </span>
             </div>
             <div className="flex items-center space-x-2">
               <input
@@ -455,8 +559,28 @@ export function BlogForm({ userId, blog, organizationId, projectId, redirectUrl 
           </div>
 
           <div className="flex gap-2">
-            <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : blog ? "Update Blog" : "Create Blog"}
+            <Button 
+              type="button" 
+              variant="secondary" 
+              disabled={loading}
+              onClick={async () => {
+                setValue("published", false)
+                await handleSubmit(onSubmit)()
+              }}
+            >
+              {loading && !watch("published") && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {loading && !watch("published") ? "Saving Draft..." : "Save as Draft"}
+            </Button>
+            <Button 
+              type="button" 
+              disabled={loading}
+              onClick={async () => {
+                setValue("published", true)
+                await handleSubmit(onSubmit)()
+              }}
+            >
+              {loading && watch("published") && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {loading && watch("published") ? "Publishing..." : "Publish"}
             </Button>
             <Button
               type="button"

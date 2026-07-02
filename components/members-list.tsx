@@ -42,7 +42,7 @@ interface MembersListProps {
 
 export function MembersList({ members, orgSlug, currentUserRole }: MembersListProps) {
     const [isUpdating, setIsUpdating] = useState(false)
-    const canManageMembers = currentUserRole === "OWNER" || currentUserRole === "ADMIN"
+    const canManageMembers = currentUserRole === "OWNER"
 
     const handleRoleChange = async (memberId: string, newRole: string) => {
         setIsUpdating(true)

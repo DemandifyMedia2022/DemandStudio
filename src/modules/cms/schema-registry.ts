@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
+import { pool } from '@/lib/db';
 import { RESERVED_FIELDS } from './constants';
 
 export class SchemaRegistry {
@@ -9,33 +9,30 @@ export class SchemaRegistry {
      * and builds a dynamic Zod validator.
      */
     static async getValidationSchema(typeSlug: string, projectId?: string) {
-        // 1. Fetch ContentDefinition
-        const whereClause: any = { slug: typeSlug };
+        const params: any[] = [typeSlug];
+        let sql = `SELECT * FROM "ContentType" WHERE "slug" = $1`;
         if (projectId) {
-            whereClause.projectId = projectId;
+            params.push(projectId);
+            sql += ` AND "projectId" = $2`;
         }
+        sql += ` LIMIT 1`;
 
-        // Note: In a real multi-tenant scenario, we probably want to strictly enforce projectId
-        // if provided, or fallback to global types if not.
-
-        const contentType = await prisma.contentType.findFirst({
-            where: whereClause,
-            include: {
-                fields: {
-                    orderBy: { order: 'asc' }
-                }
-            }
-        });
+        const contentTypeResult = await pool.query(sql, params);
+        const contentType = contentTypeResult.rows[0];
 
         if (!contentType) {
             throw new Error(`Content type '${typeSlug}' not found.`);
         }
 
-        // 2. Build Zod Shape
+        const fieldsResult = await pool.query(
+            `SELECT * FROM "ContentField" WHERE "contentTypeId" = $1 ORDER BY "order" ASC`,
+            [contentType.id]
+        );
+        const fields = fieldsResult.rows;
+
         const shape: Record<string, z.ZodTypeAny> = {};
 
-        contentType.fields.forEach((field) => {
-            // Prevent overwriting reserved system fields
+        fields.forEach((field: any) => {
             if (RESERVED_FIELDS.includes(field.key as any)) {
                 return;
             }
@@ -64,10 +61,9 @@ export class SchemaRegistry {
                     fieldSchema = z.any();
                     break;
                 default:
-                    fieldSchema = z.any(); // Fallback
+                    fieldSchema = z.any();
             }
 
-            // Handle required vs optional
             if (!field.required) {
                 fieldSchema = fieldSchema.optional().nullable();
             }
@@ -75,10 +71,6 @@ export class SchemaRegistry {
             shape[field.key] = fieldSchema;
         });
 
-        // 3. Return generic object schema
-        // We allow "passthrough" or unknown keys if we want to be flexible, 
-        // but strict is better for schema enforcement. 
-        // For now, we allow unknown keys to not break if extra data is present (like system fields).
         return z.object(shape).passthrough();
     }
 }

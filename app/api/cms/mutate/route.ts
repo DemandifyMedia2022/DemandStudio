@@ -1,10 +1,72 @@
 import { NextRequest } from 'next/server';
 import { validateApiKey, apiErrorResponse, apiSuccessResponse } from '@/lib/api-auth';
 import { SchemaRegistry } from '@/src/modules/cms/schema-registry';
-import { prisma } from '@/lib/prisma';
+import { pool } from '@/lib/db';
+import crypto from 'crypto';
+
+function postLikeData(doc: any, userId?: string) {
+    return [
+        doc.title,
+        doc.slug,
+        doc.content || '',
+        doc.excerpt || null,
+        doc.published ?? false,
+        doc.featured ?? false,
+        doc.image || null,
+        doc.projectId || null,
+        doc.authorId || userId || 'system',
+    ];
+}
+
+async function upsertPost(doc: any, userId?: string) {
+    const uniqueIdentity = doc._id;
+    const data = postLikeData(doc, userId);
+    if (uniqueIdentity) {
+        const { rows } = await pool.query(
+            `UPDATE "Post"
+             SET "title" = $1, "slug" = $2, "content" = $3, "excerpt" = $4, "published" = $5,
+                 "featured" = $6, "image" = $7, "projectId" = $8, "authorId" = $9, "updatedAt" = $10
+             WHERE "id" = $11
+             RETURNING *`,
+            [...data, new Date(), uniqueIdentity]
+        );
+        return rows[0];
+    }
+    const now = new Date();
+    const { rows } = await pool.query(
+        `INSERT INTO "Post" ("id", "title", "slug", "content", "excerpt", "published", "featured", "image", "projectId", "authorId", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+         RETURNING *`,
+        [crypto.randomUUID(), ...data, now]
+    );
+    return rows[0];
+}
+
+async function upsertBlog(doc: any, userId?: string) {
+    const uniqueIdentity = doc._id;
+    const data = postLikeData(doc, userId);
+    if (uniqueIdentity) {
+        const { rows } = await pool.query(
+            `UPDATE "Blog"
+             SET "title" = $1, "slug" = $2, "content" = $3, "excerpt" = $4, "published" = $5,
+                 "featured" = $6, "image" = $7, "projectId" = $8, "authorId" = $9, "updatedAt" = $10
+             WHERE "id" = $11
+             RETURNING *`,
+            [...data, new Date(), uniqueIdentity]
+        );
+        return rows[0];
+    }
+    const now = new Date();
+    const { rows } = await pool.query(
+        `INSERT INTO "Blog" ("id", "title", "slug", "content", "excerpt", "published", "featured", "image", "projectId", "authorId", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+         RETURNING *`,
+        [crypto.randomUUID(), ...data, now]
+    );
+    return rows[0];
+}
 
 export async function POST(request: NextRequest) {
-    // 1. Auth Check
     const authResult = await validateApiKey(request);
     if (!authResult.valid) {
         return apiErrorResponse(authResult.error || 'Unauthorized', 401, request);
@@ -12,12 +74,6 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const { mutations } = body;
-
-        // Support Sanity-like mutation structure: { mutations: [ { create: { ... } }, { patch: { ... } } ] }
-        // For MVP, we'll support a simpler "createOrReplace" style: { _type: 'blog', ...data }
-
-        // MVP Implementation: Single Document Creation/Update
         const doc = body;
 
         if (!doc._type) {
@@ -26,32 +82,8 @@ export async function POST(request: NextRequest) {
 
         const uniqueIdentity = doc._id;
 
-        // Special handling for 'post' and 'blog'
         if (doc._type === 'post') {
-            const postData = {
-                title: doc.title,
-                slug: doc.slug,
-                content: doc.content || '',
-                excerpt: doc.excerpt,
-                published: doc.published ?? false,
-                featured: doc.featured ?? false,
-                image: doc.image,
-                projectId: doc.projectId || undefined,
-                authorId: doc.authorId || authResult.userId || 'system',
-            };
-
-            let result;
-            if (uniqueIdentity) {
-                result = await prisma.post.update({
-                    where: { id: uniqueIdentity },
-                    data: postData
-                });
-            } else {
-                result = await prisma.post.create({
-                    data: postData as any
-                });
-            }
-
+            const result = await upsertPost(doc, authResult.userId);
             return apiSuccessResponse({
                 transactionId: new Date().getTime().toString(),
                 results: [{ id: result.id, operation: uniqueIdentity ? 'update' : 'create' }]
@@ -59,59 +91,25 @@ export async function POST(request: NextRequest) {
         }
 
         if (doc._type === 'blog') {
-            const blogData = {
-                title: doc.title,
-                slug: doc.slug,
-                content: doc.content || '',
-                excerpt: doc.excerpt,
-                published: doc.published ?? false,
-                featured: doc.featured ?? false,
-                image: doc.image,
-                projectId: doc.projectId || undefined,
-                authorId: doc.authorId || authResult.userId || 'system',
-            };
-
-            let result;
-            if (uniqueIdentity) {
-                result = await prisma.blog.update({
-                    where: { id: uniqueIdentity },
-                    data: blogData
-                });
-            } else {
-                result = await prisma.blog.create({
-                    data: blogData as any
-                });
-            }
-
+            const result = await upsertBlog(doc, authResult.userId);
             return apiSuccessResponse({
                 transactionId: new Date().getTime().toString(),
                 results: [{ id: result.id, operation: uniqueIdentity ? 'update' : 'create' }]
             }, 200, request);
         }
 
-        // 2. Get Validation Schema
-        // In a real scenario, we'd cache this or look it up efficiently.
         const validator = await SchemaRegistry.getValidationSchema(doc._type);
-
-        // 3. Validate
-        // uniqueIdentity is already hoisted/declared at top
-
-
-        // Remove system fields before validation if strict, or let SchemaRegistry handle it.
-        // SchemaRegistry is currently `passthrough`, so it ignores extra fields.
-        // However, we want to validate the *payload* against the defined fields.
-
         const parsed = validator.safeParse(doc);
 
         if (!parsed.success) {
             return apiErrorResponse('Validation Error', 400, request);
         }
 
-        // 4. Persistence
-        // Need to find the ContentTypeId
-        const contentType = await prisma.contentType.findFirst({
-            where: { slug: doc._type }
-        });
+        const contentTypeResult = await pool.query(
+            `SELECT * FROM "ContentType" WHERE "slug" = $1 LIMIT 1`,
+            [doc._type]
+        );
+        const contentType = contentTypeResult.rows[0];
 
         if (!contentType) {
             return apiErrorResponse(`Unknown Content Type: ${doc._type}`, 400, request);
@@ -119,36 +117,38 @@ export async function POST(request: NextRequest) {
 
         let resultItem;
         const dataString = JSON.stringify(parsed.data);
+        const now = new Date();
 
         if (uniqueIdentity) {
-            // Update or Create with specific ID
-            resultItem = await prisma.contentItem.upsert({
-                where: { id: uniqueIdentity },
-                create: {
-                    id: uniqueIdentity,
-                    contentTypeId: contentType.id,
-                    data: dataString,
-                    published: doc.published ?? false // Default to false if not specified
-                },
-                update: {
-                    data: dataString,
-                    published: doc.published ?? undefined
-                },
-                include: { contentType: true }
-            });
+            const existingResult = await pool.query(`SELECT "id" FROM "ContentItem" WHERE "id" = $1 LIMIT 1`, [uniqueIdentity]);
+            if (existingResult.rows[0]) {
+                const updateResult = await pool.query(
+                    `UPDATE "ContentItem"
+                     SET "data" = $1, "published" = COALESCE($2, "published"), "updatedAt" = $3
+                     WHERE "id" = $4
+                     RETURNING *`,
+                    [dataString, doc.published === undefined ? null : doc.published, now, uniqueIdentity]
+                );
+                resultItem = updateResult.rows[0];
+            } else {
+                const createResult = await pool.query(
+                    `INSERT INTO "ContentItem" ("id", "contentTypeId", "data", "published", "createdAt", "updatedAt")
+                     VALUES ($1, $2, $3, $4, $5, $5)
+                     RETURNING *`,
+                    [uniqueIdentity, contentType.id, dataString, doc.published ?? false, now]
+                );
+                resultItem = createResult.rows[0];
+            }
         } else {
-            // Create new
-            resultItem = await prisma.contentItem.create({
-                data: {
-                    contentTypeId: contentType.id,
-                    data: dataString,
-                    published: doc.published ?? false
-                },
-                include: { contentType: true }
-            });
+            const createResult = await pool.query(
+                `INSERT INTO "ContentItem" ("id", "contentTypeId", "data", "published", "createdAt", "updatedAt")
+                 VALUES ($1, $2, $3, $4, $5, $5)
+                 RETURNING *`,
+                [crypto.randomUUID(), contentType.id, dataString, doc.published ?? false, now]
+            );
+            resultItem = createResult.rows[0];
         }
 
-        // 5. Response
         return apiSuccessResponse({
             transactionId: new Date().getTime().toString(),
             results: [

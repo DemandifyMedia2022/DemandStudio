@@ -1,14 +1,7 @@
-
 import { auth } from "@/lib/auth"
-import { prisma as db } from "@/lib/prisma"
+import { pool } from "@/lib/db"
 import { NextResponse } from "next/server"
 import * as z from "zod"
-
-const routeContextSchema = z.object({
-    params: z.object({
-        id: z.string(),
-    }),
-})
 
 export async function DELETE(
     req: Request,
@@ -24,25 +17,18 @@ export async function DELETE(
 
         // Check permissions
         // Allow if user is OWNER of the org OR SUPERADMIN (future)
-        const membership = await db.organizationMember.findUnique({
-            where: {
-                organizationId_userId: {
-                    organizationId: params.id,
-                    userId: session.user.id,
-                },
-            },
-        })
+        const membershipResult = await pool.query(
+            `SELECT * FROM "OrganizationMember" WHERE "organizationId" = $1 AND "userId" = $2 LIMIT 1`,
+            [params.id, session.user.id]
+        )
+        const membership = membershipResult.rows[0]
 
         // TODO: Add Superadmin check here too
         if (!membership || membership.role !== "OWNER") {
             return new NextResponse("Forbidden", { status: 403 })
         }
 
-        await db.organization.delete({
-            where: {
-                id: params.id,
-            },
-        })
+        await pool.query(`DELETE FROM "Organization" WHERE "id" = $1`, [params.id])
 
         return new NextResponse(null, { status: 204 })
     } catch (error) {
