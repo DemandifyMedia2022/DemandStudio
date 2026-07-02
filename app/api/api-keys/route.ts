@@ -35,9 +35,9 @@ export async function GET(request: NextRequest) {
 
     const { rows: apiKeys } = await pool.query(
       `SELECT * FROM "ApiKey"
-       WHERE "userId" = $1 AND "projectId" = $2
+       WHERE "projectId" = $1
        ORDER BY "createdAt" DESC`,
-      [session.user.id, project.id]
+      [project.id]
     )
 
     // Don't return the full key, just a masked version

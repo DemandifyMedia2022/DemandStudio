@@ -18,7 +18,7 @@ export default async function MembersPage({ params }: { params: Promise<{ orgSlu
 
     const members = await getOrganizationMembers(orgSlug)
     const currentUserRole = members.find((member: any) => member.user.id === session.user.id)?.role
-    const canManageMembers = currentUserRole === "OWNER" || currentUserRole === "ADMIN"
+    const canManageMembers = currentUserRole === "OWNER" || currentUserRole === "ADMIN" || currentUserRole === "MEMBER"
 
     return (
         <div className="min-h-screen flex flex-col">
